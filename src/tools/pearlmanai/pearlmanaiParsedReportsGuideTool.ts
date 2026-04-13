@@ -1,4 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { PEARL_MANAI_GUIDE_HIDDEN_DATABASES } from "../../common/pearlmanaiConversationLog.js";
 import {
     PEARL_MANAI_PARSED_REPORTS_GUIDE_MARKDOWN,
     PEARL_MANAI_SYSTEM_DATABASES,
@@ -31,7 +32,10 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
 
         const propertyDbNames = dbs
             .map((d) => d.name)
-            .filter((name) => !PEARL_MANAI_SYSTEM_DATABASES.has(name))
+            .filter(
+                (name) =>
+                    !PEARL_MANAI_SYSTEM_DATABASES.has(name) && !PEARL_MANAI_GUIDE_HIDDEN_DATABASES.has(name)
+            )
             .sort((a, b) => a.localeCompare(b));
 
         const items: { propertyDbName: string; reportCollections: string[] }[] = [];
