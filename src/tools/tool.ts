@@ -15,6 +15,7 @@ import { TRANSPORT_PAYLOAD_LIMITS, type TransportType } from "../transports/cons
 import { getRandomUUID } from "../helpers/getRandomUUID.js";
 import type { DefaultMetrics, Metrics } from "../common/metrics/index.js";
 import { redact } from "mongodb-redact";
+import { emitPearlmanaiMcpToolCallEvent, isPearlmanaiAxiomEnabled } from "../common/pearlmanaiAxiomEvents.js";
 
 export type ToolArgs<T extends ZodRawShape> = {
     [K in keyof T]: z.infer<T[K]>;
@@ -486,6 +487,13 @@ export abstract class ToolBase<
     /** This is used internally by the server to invoke the tool. It can also be run manually to call the tool directly. */
     public async invoke(args: ToolArgs<typeof this.argsShape>, context: ToolExecutionContext): Promise<CallToolResult> {
         let startTime: number = Date.now();
+        let pearlmanaiOutcome:
+            | {
+                  result: CallToolResult;
+                  status: "success" | "error" | "confirmation_declined";
+                  executionError?: unknown;
+              }
+            | undefined;
 
         try {
             if (this.requiresConfirmation()) {
@@ -496,7 +504,7 @@ export abstract class ToolBase<
                         message: `User did not confirm the execution of the \`${this.name}\` tool so the operation was not performed.`,
                         noRedaction: true,
                     });
-                    return {
+                    const declined: CallToolResult = {
                         content: [
                             {
                                 type: "text",
@@ -505,6 +513,8 @@ export abstract class ToolBase<
                         ],
                         isError: true,
                     };
+                    pearlmanaiOutcome = { result: declined, status: "confirmation_declined" };
+                    return declined;
                 }
                 // We do not want to include the elicitation time in the tool execution time
                 // so we reset the startTime to the current time. We may want to consider adding
@@ -541,6 +551,10 @@ export abstract class ToolBase<
                 message: `Executed tool ${this.name}`,
                 noRedaction: true,
             });
+            pearlmanaiOutcome = {
+                result,
+                status: result.isError ? "error" : "success",
+            };
             return result;
         } catch (error: unknown) {
             this.session.logger.error({
@@ -563,7 +577,25 @@ export abstract class ToolBase<
                 durationSeconds
             );
 
+            pearlmanaiOutcome = {
+                result: toolResult,
+                status: "error",
+                executionError: error,
+            };
             return toolResult;
+        } finally {
+            if (pearlmanaiOutcome && isPearlmanaiAxiomEnabled()) {
+                emitPearlmanaiMcpToolCallEvent({
+                    toolName: this.name,
+                    category: this.category,
+                    operationType: this.operationType,
+                    durationMs: Date.now() - startTime,
+                    status: pearlmanaiOutcome.status,
+                    args,
+                    result: pearlmanaiOutcome.result,
+                    executionError: pearlmanaiOutcome.executionError,
+                });
+            }
         }
     }
 

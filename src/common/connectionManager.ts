@@ -12,6 +12,8 @@ import {
     type ConnectionStringInfo,
     type AtlasClusterConnectionInfo,
 } from "./connectionInfo.js";
+import { attachPearlmanaiMongoCommandAxiom } from "./pearlmanaiMongoCommandAxiom.js";
+import { emitPearlmanaiAxiomEvent, shouldEnablePearlmanaiAxiomMongoMonitoring } from "./pearlmanaiAxiomEvents.js";
 
 export type { ConnectionStringInfo, ConnectionStringAuthType, AtlasClusterConnectionInfo } from "./connectionInfo.js";
 
@@ -144,6 +146,7 @@ export abstract class ConnectionManager {
 export class MCPConnectionManager extends ConnectionManager {
     private deviceId: DeviceId;
     private bus: EventEmitter;
+    private pearlmanaiAxiomMongoDetach?: () => void;
 
     constructor(
         private userConfig: UserConfig,
@@ -200,6 +203,13 @@ export class MCPConnectionManager extends ConnectionManager {
             connectionInfo.driverOptions.proxy ??= { useEnvironmentVariableProxies: true };
             connectionInfo.driverOptions.applyProxyToOIDC ??= true;
 
+            if (shouldEnablePearlmanaiAxiomMongoMonitoring()) {
+                connectionInfo.driverOptions = {
+                    ...connectionInfo.driverOptions,
+                    monitorCommands: true,
+                };
+            }
+
             connectionStringInfo = getConnectionStringInfo(
                 connectionInfo.connectionString,
                 this.userConfig,
@@ -218,6 +228,11 @@ export class MCPConnectionManager extends ConnectionManager {
             );
         } catch (error: unknown) {
             const errorReason = error instanceof Error ? error.message : `${error as string}`;
+            emitPearlmanaiAxiomEvent({
+                eventType: "mongodb_connection_error",
+                phase: "connection_string_or_driver_setup",
+                errorMessage: errorReason,
+            });
             this.changeState("connection-error", {
                 tag: "errored",
                 errorReason,
@@ -238,12 +253,19 @@ export class MCPConnectionManager extends ConnectionManager {
                 });
             }
 
+            const sp = await serviceProvider;
+            this.attachPearlmanaiAxiomMongoLogging(sp);
             return this.changeState(
                 "connection-success",
-                new ConnectionStateConnected(await serviceProvider, connectionStringInfo, settings.atlas)
+                new ConnectionStateConnected(sp, connectionStringInfo, settings.atlas)
             );
         } catch (error: unknown) {
             const errorReason = error instanceof Error ? error.message : `${error as string}`;
+            emitPearlmanaiAxiomEvent({
+                eventType: "mongodb_connection_error",
+                phase: "initial_connect",
+                errorMessage: errorReason,
+            });
             this.changeState("connection-error", {
                 tag: "errored",
                 errorReason,
@@ -254,7 +276,22 @@ export class MCPConnectionManager extends ConnectionManager {
         }
     }
 
+    private attachPearlmanaiAxiomMongoLogging(serviceProvider: NodeDriverServiceProvider): void {
+        this.detachPearlmanaiAxiomMongoLogging();
+        if (!shouldEnablePearlmanaiAxiomMongoMonitoring()) {
+            return;
+        }
+        this.pearlmanaiAxiomMongoDetach = attachPearlmanaiMongoCommandAxiom(serviceProvider.getRawClient());
+    }
+
+    private detachPearlmanaiAxiomMongoLogging(): void {
+        this.pearlmanaiAxiomMongoDetach?.();
+        this.pearlmanaiAxiomMongoDetach = undefined;
+    }
+
     override async disconnect(): Promise<ConnectionStateDisconnected | ConnectionStateErrored> {
+        this.detachPearlmanaiAxiomMongoLogging();
+
         if (this.currentConnectionState.tag === "disconnected" || this.currentConnectionState.tag === "errored") {
             return this.currentConnectionState;
         }
@@ -307,14 +344,16 @@ export class MCPConnectionManager extends ConnectionManager {
             this.currentConnectionState.tag === "connecting" &&
             this.currentConnectionState.connectionStringInfo?.authType?.startsWith("oidc")
         ) {
+            const sp = await this.currentConnectionState.serviceProvider;
             this.changeState(
                 "connection-success",
                 new ConnectionStateConnected(
-                    await this.currentConnectionState.serviceProvider,
+                    sp,
                     this.currentConnectionState.connectionStringInfo,
                     this.currentConnectionState.connectedAtlasCluster
                 )
             );
+            this.attachPearlmanaiAxiomMongoLogging(sp);
         }
 
         this.logger.info({

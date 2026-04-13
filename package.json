@@ -156,6 +156,7 @@
     "vitest": "^4.1.2"
   },
   "dependencies": {
+    "@axiomhq/js": "^1.6.0",
     "@inquirer/prompts": "^8.0.2",
     "@inquirer/select": "^5.1.0",
     "@mcp-ui/server": "^5.13.1",
