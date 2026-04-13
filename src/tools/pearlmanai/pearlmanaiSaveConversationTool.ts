@@ -8,13 +8,25 @@ import {
 import type { ToolArgs, OperationType, ToolCategory, ToolExecutionContext } from "../tool.js";
 import { MongoDBToolBase } from "../mongodb/mongodbTool.js";
 
+/** Roles allowed in persisted conversation logs (strict, chronological array format). */
+export const PEARL_MANAI_CONVERSATION_ROLES = ["user", "assistant", "system"] as const;
+
+export type PearlmanaiConversationRole = (typeof PEARL_MANAI_CONVERSATION_ROLES)[number];
+
+const conversationRoleSchema = z.enum(["user", "assistant", "system"]);
+
 export class PearlmanaiSaveConversationTool extends MongoDBToolBase {
     static toolName = "pearlmanai-save-conversation";
     static category: ToolCategory = "mongodb";
     static operationType: OperationType = "create";
 
-    public description =
-        "Pearlman AI: saves a Claude conversation export to MongoDB database `logs`, collection `logs` (one document per call). Pass whatever the agent can provide: structured `messages` and/or a single `transcript` string. Requires write access — the MCP server must not be started with `--readOnly`.";
+    public description = [
+        "Pearlman AI: saves a Claude conversation to MongoDB `logs.logs` (one document per call).",
+        "REQUIRED FORMAT: always pass `messages` as a non-empty array of { role, content } in chronological order.",
+        "Each `role` must be exactly one of: \"user\", \"assistant\", \"system\" — use \"user\" for the human, \"assistant\" for your (the model's) turns, \"system\" only for system/developer context if you include it.",
+        "Do not use a free-form transcript; always use the messages array so storage is consistent.",
+        "Requires write access (MCP must not use `--readOnly`).",
+    ].join(" ");
 
     public argsShape = {
         title: z
@@ -24,50 +36,36 @@ export class PearlmanaiSaveConversationTool extends MongoDBToolBase {
         messages: z
             .array(
                 z.object({
-                    role: z.string().describe("Message role, e.g. user, assistant."),
-                    content: z.string().describe("Message body text."),
+                    role: conversationRoleSchema.describe(
+                            'Turn author: "user" = human, "assistant" = model, "system" = system/developer context only.'
+                        ),
+                    content: z.string().describe("Plain text for this turn."),
                 })
             )
-            .optional()
-            .describe("Structured chat turns when the agent can provide them."),
-        transcript: z
-            .string()
-            .optional()
-            .describe("Full conversation as one string if not using structured messages."),
+            .min(1)
+            .describe(
+                "Required. Chronological chat turns. Only roles user | assistant | system; no other shape is accepted."
+            ),
         metadata: z
             .record(z.unknown())
             .optional()
-            .describe("Optional extra fields (e.g. client hint, session id as string)."),
+            .describe("Optional extra JSON (e.g. client, session id)."),
     };
 
     protected async execute(
         args: ToolArgs<typeof this.argsShape>,
         _context: ToolExecutionContext
     ): Promise<CallToolResult> {
-        const hasMessages = args.messages !== undefined && args.messages.length > 0;
-        const hasTranscript = args.transcript !== undefined && args.transcript.trim().length > 0;
-        if (!hasMessages && !hasTranscript) {
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: "Provide at least one of: `messages` (non-empty array) or `transcript` (non-empty string).",
-                    },
-                ],
-                isError: true,
-            };
-        }
-
+        const provider = await this.ensureConnected();
         const doc: Document = {
             savedAt: new Date().toISOString(),
             source: "claude-mcp",
+            format: "messages-v1",
+            messages: args.messages,
             ...(args.title !== undefined ? { title: args.title } : {}),
-            ...(args.messages !== undefined ? { messages: args.messages } : {}),
-            ...(args.transcript !== undefined ? { transcript: args.transcript } : {}),
             ...(args.metadata !== undefined ? { metadata: args.metadata } : {}),
         };
 
-        const provider = await this.ensureConnected();
         const result = await provider.insertMany(PEARL_MANAI_LOGS_DATABASE, PEARL_MANAI_LOGS_COLLECTION, [doc]);
         const insertedIds = Object.values(result.insertedIds);
         const insertedId = insertedIds[0];
