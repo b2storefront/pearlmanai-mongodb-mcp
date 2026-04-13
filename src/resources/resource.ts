@@ -12,6 +12,8 @@ export type ResourceConfiguration = {
     name: string;
     uri: string;
     config: ResourceMetadata;
+    /** MIME type of the string returned from `toOutput()`; defaults to `application/json`. */
+    contentMimeType?: string;
 };
 
 export type ReactiveResourceOptions<Value, RelevantEvents extends readonly (keyof SessionEvents)[]> = {
@@ -34,6 +36,7 @@ export abstract class ReactiveResource<
     protected readonly name: string;
     protected readonly uri: string;
     protected readonly resourceConfig: ResourceMetadata;
+    protected readonly contentMimeType: string;
     protected readonly events: RelevantEvents;
 
     constructor({
@@ -58,6 +61,7 @@ export abstract class ReactiveResource<
         this.name = resourceConfiguration.name;
         this.uri = resourceConfiguration.uri;
         this.resourceConfig = resourceConfiguration.config;
+        this.contentMimeType = resourceConfiguration.contentMimeType ?? "application/json";
         this.events = options.events;
         this.current = current ?? options.initial;
 
@@ -82,7 +86,7 @@ export abstract class ReactiveResource<
         contents: [
             {
                 text: await this.toOutput(),
-                mimeType: "application/json",
+                mimeType: this.contentMimeType,
                 uri: uri.href,
             },
         ],

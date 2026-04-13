@@ -1,5 +1,6 @@
 import type { UserConfig } from "../common/config/userConfig.js";
 import { packageInfo } from "../common/packageInfo.js";
+import { getPearlmanaiMcpInstructionsAppendix } from "../common/pearlmanaiParsedReportsGuide.js";
 import { type AnyToolClass, Server, type ServerOptions } from "../server.js";
 import { Session, type SessionOptions } from "../common/session.js";
 import { Telemetry } from "../telemetry/telemetry.js";
@@ -449,6 +450,8 @@ export abstract class TransportRunnerBase<
             instructions += `
             This MCP server was configured with MongoDB Atlas API credentials.`;
         }
+
+        instructions += getPearlmanaiMcpInstructionsAppendix();
 
         return instructions;
     }

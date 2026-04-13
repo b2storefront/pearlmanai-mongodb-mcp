@@ -2,6 +2,7 @@ import * as AtlasTools from "./atlas/tools.js";
 import * as AtlasLocalTools from "./atlasLocal/tools.js";
 import * as MongoDbTools from "./mongodb/tools.js";
 import * as AssistantTools from "./assistant/tools.js";
+import * as PearlmanaiTools from "./pearlmanai/tools.js";
 import type { ToolClass } from "./tool.js";
 
 // Export the collection of tools for easier reference
@@ -10,6 +11,7 @@ export const AllTools: ToolClass[] = Object.values({
     ...AtlasTools,
     ...AtlasLocalTools,
     ...AssistantTools,
+    ...PearlmanaiTools,
 });
 
 export { MongoDBToolBase } from "./mongodb/mongodbTool.js";
@@ -19,6 +21,7 @@ export * from "./atlas/tools.js";
 export * from "./atlasLocal/tools.js";
 export * from "./mongodb/tools.js";
 export * from "./assistant/tools.js";
+export * from "./pearlmanai/tools.js";
 
 // Export the base tool class and supporting types.
 export {
