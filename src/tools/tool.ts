@@ -16,13 +16,22 @@ import { getRandomUUID } from "../helpers/getRandomUUID.js";
 import type { DefaultMetrics, Metrics } from "../common/metrics/index.js";
 import { redact } from "mongodb-redact";
 import { emitPearlmanaiMcpToolCallEvent, isPearlmanaiAxiomEnabled } from "../common/pearlmanaiAxiomEvents.js";
+import { buildPearlmanaiMcpCorrelation, pearlmanaiMcpAsyncContext } from "../common/pearlmanaiMcpRequestContext.js";
 
 export type ToolArgs<T extends ZodRawShape> = {
     [K in keyof T]: z.infer<T[K]>;
 };
 
+/**
+ * Passed to `execute` / `invoke` from the MCP SDK (`RequestHandlerExtra`).
+ * See `@modelcontextprotocol/sdk` — includes `sessionId`, `authInfo`, etc. when available.
+ */
 export interface ToolExecutionContext {
     signal: AbortSignal;
+    /** MCP transport session id (e.g. Streamable HTTP). */
+    sessionId?: string;
+    /** JSON-RPC id for this `tools/call` request. */
+    requestId?: string | number;
     /**
      * Request context object available only when running atop
      * StreamableHttpTransport.
@@ -30,6 +39,14 @@ export interface ToolExecutionContext {
     requestInfo?: {
         headers?: Record<string, unknown>;
     };
+    /** OAuth / bearer metadata when MCP auth is enabled (do not log `token`). */
+    authInfo?: {
+        clientId: string;
+        scopes: string[];
+        expiresAt?: number;
+        extra?: Record<string, unknown>;
+    };
+    _meta?: Record<string, unknown>;
 }
 
 export type ToolResult<OutputSchema extends ZodRawShape | undefined = undefined> = OutputSchema extends ZodRawShape
@@ -486,6 +503,15 @@ export abstract class ToolBase<
 
     /** This is used internally by the server to invoke the tool. It can also be run manually to call the tool directly. */
     public async invoke(args: ToolArgs<typeof this.argsShape>, context: ToolExecutionContext): Promise<CallToolResult> {
+        return pearlmanaiMcpAsyncContext.run(buildPearlmanaiMcpCorrelation(context), async () => {
+            return this.invokeWithPearlmanaiAxiomContext(args, context);
+        });
+    }
+
+    private async invokeWithPearlmanaiAxiomContext(
+        args: ToolArgs<typeof this.argsShape>,
+        context: ToolExecutionContext
+    ): Promise<CallToolResult> {
         let startTime: number = Date.now();
         let pearlmanaiOutcome:
             | {
@@ -594,6 +620,7 @@ export abstract class ToolBase<
                     args,
                     result: pearlmanaiOutcome.result,
                     executionError: pearlmanaiOutcome.executionError,
+                    mcpCorrelation: buildPearlmanaiMcpCorrelation(context),
                 });
             }
         }

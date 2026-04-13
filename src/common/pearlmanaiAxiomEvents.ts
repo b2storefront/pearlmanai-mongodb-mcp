@@ -1,6 +1,10 @@
 import { Axiom, type ClientOptions } from "@axiomhq/js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { redact } from "mongodb-redact";
+import {
+    type PearlmanaiMcpAxiomCorrelation,
+    pearlmanaiMcpCorrelationToEventFields,
+} from "./pearlmanaiMcpRequestContext.js";
 
 /**
  * Pearlman AI fork: send structured usage events to Axiom when configured.
@@ -209,6 +213,8 @@ export function emitPearlmanaiMcpToolCallEvent(params: {
     args: unknown;
     result: CallToolResult;
     executionError?: unknown;
+    /** MCP session / OAuth / proxy user hints (see pearlmanaiMcpRequestContext). */
+    mcpCorrelation?: PearlmanaiMcpAxiomCorrelation;
 }): void {
     const rawArgs =
         params.args !== null && typeof params.args === "object"
@@ -224,6 +230,7 @@ export function emitPearlmanaiMcpToolCallEvent(params: {
         status: params.status,
         inputJson,
         resultSummary: summarizeCallToolResultForAxiom(params.result),
+        ...(params.mcpCorrelation ? pearlmanaiMcpCorrelationToEventFields(params.mcpCorrelation) : {}),
     };
     if (params.executionError !== undefined) {
         const e = params.executionError;

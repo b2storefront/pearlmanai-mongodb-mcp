@@ -2,6 +2,7 @@ import type { CommandFailedEvent, CommandStartedEvent, CommandSucceededEvent, Mo
 import { redact } from "mongodb-redact";
 import { EJSON } from "bson";
 import { emitPearlmanaiAxiomEvent } from "./pearlmanaiAxiomEvents.js";
+import { pearlmanaiMcpAsyncContext, pearlmanaiMcpCorrelationToEventFields } from "./pearlmanaiMcpRequestContext.js";
 
 const MAX_REPLY_JSON_CHARS = 32_000;
 
@@ -42,6 +43,14 @@ function redactedCommandJson(command: CommandStartedEvent["command"]): string {
  * Attach Axiom logging for MongoDB wire protocol commands (requires `monitorCommands: true` on the client).
  * Returns a detach function; call before closing the client to avoid leaks.
  */
+function mergeAsyncMcpContext(event: Record<string, unknown>): Record<string, unknown> {
+    const store = pearlmanaiMcpAsyncContext.getStore();
+    if (!store) {
+        return event;
+    }
+    return { ...event, ...pearlmanaiMcpCorrelationToEventFields(store) };
+}
+
 export function attachPearlmanaiMongoCommandAxiom(client: MongoClient): () => void {
     const pending = new Map<number, PendingCommand>();
 
@@ -58,35 +67,39 @@ export function attachPearlmanaiMongoCommandAxiom(client: MongoClient): () => vo
     const onSucceeded = (e: CommandSucceededEvent): void => {
         const p = pending.get(e.requestId);
         pending.delete(e.requestId);
-        emitPearlmanaiAxiomEvent({
-            eventType: "mongodb_command",
-            outcome: "success",
-            commandName: e.commandName,
-            databaseName: e.databaseName,
-            address: e.address,
-            durationMs: e.duration,
-            requestId: e.requestId,
-            redactedCommandJson: p?.redactedCommandJson ?? "",
-            replySummary: serializeReplySummary(e.reply),
-        });
+        emitPearlmanaiAxiomEvent(
+            mergeAsyncMcpContext({
+                eventType: "mongodb_command",
+                outcome: "success",
+                commandName: e.commandName,
+                databaseName: e.databaseName,
+                address: e.address,
+                durationMs: e.duration,
+                requestId: e.requestId,
+                redactedCommandJson: p?.redactedCommandJson ?? "",
+                replySummary: serializeReplySummary(e.reply),
+            })
+        );
     };
 
     const onFailed = (e: CommandFailedEvent): void => {
         const p = pending.get(e.requestId);
         pending.delete(e.requestId);
-        emitPearlmanaiAxiomEvent({
-            eventType: "mongodb_command",
-            outcome: "error",
-            commandName: e.commandName,
-            databaseName: e.databaseName,
-            address: e.address,
-            durationMs: e.duration,
-            requestId: e.requestId,
-            redactedCommandJson: p?.redactedCommandJson ?? "",
-            errorName: e.failure.name,
-            errorMessage: e.failure.message,
-            errorStack: e.failure.stack,
-        });
+        emitPearlmanaiAxiomEvent(
+            mergeAsyncMcpContext({
+                eventType: "mongodb_command",
+                outcome: "error",
+                commandName: e.commandName,
+                databaseName: e.databaseName,
+                address: e.address,
+                durationMs: e.duration,
+                requestId: e.requestId,
+                redactedCommandJson: p?.redactedCommandJson ?? "",
+                errorName: e.failure.name,
+                errorMessage: e.failure.message,
+                errorStack: e.failure.stack,
+            })
+        );
     };
 
     client.on("commandStarted", onStarted);
