@@ -47,6 +47,7 @@ import { systemCA } from "@mongodb-js/devtools-proxy-support";
 import { Keychain } from "./common/keychain.js";
 import { DryRunModeRunner } from "./transports/dryModeRunner.js";
 import { runSetup } from "./setup/setupMcpServer.js";
+import { getPearlmanaiAxiomDataset, isPearlmanaiAxiomEnabled } from "./common/pearlmanaiAxiomEvents.js";
 
 async function main(): Promise<void> {
     systemCA().catch(() => undefined); // load system CA asynchronously as in mongosh
@@ -91,6 +92,13 @@ async function main(): Promise<void> {
 
     if (config.dryRun) {
         await handleDryRunRequest(config);
+    }
+
+    if (isPearlmanaiAxiomEnabled()) {
+        // stderr only — stdio MCP must keep stdout clean for JSON-RPC
+        console.error(
+            `[pearlmanai-mongodb-mcp] Axiom logging enabled (dataset: ${getPearlmanaiAxiomDataset()}). Ingest 403? Set AXIOM_ORG_ID (personal tokens) and/or AXIOM_URL (e.g. EU: https://api.eu.axiom.co).`
+        );
     }
 
     const transportRunner =

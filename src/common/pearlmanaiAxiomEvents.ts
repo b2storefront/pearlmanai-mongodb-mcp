@@ -1,12 +1,20 @@
-import { Axiom } from "@axiomhq/js";
+import { Axiom, type ClientOptions } from "@axiomhq/js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { redact } from "mongodb-redact";
 
 /**
  * Pearlman AI fork: send structured usage events to Axiom when configured.
  *
- * Set `AXIOM_TOKEN` (Axiom API token) to enable. Optional: `AXIOM_DATASET` (default `mongodb-mcp`).
- * Do not commit tokens; use environment variables or your process manager.
+ * Required: `AXIOM_TOKEN`
+ * Optional: `AXIOM_DATASET` (default `mongodb-mcp`)
+ *
+ * If ingest returns **403 Forbidden**, common fixes:
+ * - **Personal tokens** need `AXIOM_ORG_ID` (organization ID from Axiom settings).
+ * - **EU region** deployments often need `AXIOM_URL=https://api.eu.axiom.co` and optionally
+ *   `AXIOM_EDGE=eu-central-1.aws.edge.axiom.co` for ingest (see Axiom docs for your deployment).
+ * - Ensure the token can **ingest** into the target dataset (API token scopes / dataset ACLs).
+ *
+ * Do not commit secrets; use environment variables or your process manager.
  */
 let axiomClient: Axiom | null = null;
 let shutdownFlushRegistered = false;
@@ -30,20 +38,63 @@ export function getPearlmanaiAxiomDataset(): string {
     return process.env.AXIOM_DATASET?.trim() || "mongodb-mcp";
 }
 
+/** Format Axiom/fetch errors for journald (full message; 403 often truncates as "forbidd>"). */
+function formatAxiomIngestError(err: unknown): string {
+    if (err instanceof Error) {
+        const bits: string[] = [`${err.name}: ${err.message}`];
+        const extra = err as Error & {
+            status?: number;
+            statusCode?: number;
+            body?: string;
+            response?: { status?: number };
+        };
+        const status = extra.status ?? extra.statusCode ?? extra.response?.status;
+        if (status !== undefined) {
+            bits.push(`httpStatus=${String(status)}`);
+        }
+        if (typeof extra.body === "string" && extra.body.length > 0) {
+            bits.push(`body=${extra.body.slice(0, 800)}`);
+        }
+        const cause = (err as Error & { cause?: unknown }).cause;
+        if (cause !== undefined) {
+            bits.push(`cause=${formatAxiomIngestError(cause)}`);
+        }
+        return bits.join(" | ");
+    }
+    try {
+        return JSON.stringify(err);
+    } catch {
+        return String(err);
+    }
+}
+
+function buildAxiomClientOptions(token: string): ClientOptions {
+    const orgId = process.env.AXIOM_ORG_ID?.trim();
+    const url = process.env.AXIOM_URL?.trim();
+    const edge = process.env.AXIOM_EDGE?.trim();
+    const edgeUrl = process.env.AXIOM_EDGE_URL?.trim();
+
+    return {
+        token,
+        ...(orgId ? { orgId } : {}),
+        ...(url ? { url } : {}),
+        ...(edge ? { edge } : {}),
+        ...(edgeUrl ? { edgeUrl } : {}),
+        onError: (err: unknown): void => {
+            // stderr is appropriate here: logging subsystem must not depend on MCP loggers
+            // eslint-disable-next-line no-console -- Axiom client has no injected logger
+            console.error("[pearlmanai-mongodb-mcp] Axiom ingest error:", formatAxiomIngestError(err));
+        },
+    };
+}
+
 function getClient(): Axiom | null {
     const token = getAxiomToken();
     if (!token) {
         return null;
     }
     if (!axiomClient) {
-        axiomClient = new Axiom({
-            token,
-            onError: (err: unknown): void => {
-                // stderr is appropriate here: logging subsystem must not depend on MCP loggers
-                // eslint-disable-next-line no-console -- Axiom client has no injected logger
-                console.error("[pearlmanai-mongodb-mcp] Axiom ingest error:", err);
-            },
-        });
+        axiomClient = new Axiom(buildAxiomClientOptions(token));
     }
     return axiomClient;
 }
