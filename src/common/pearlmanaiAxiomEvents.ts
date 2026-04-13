@@ -8,11 +8,12 @@ import { redact } from "mongodb-redact";
  * Required: `AXIOM_TOKEN`
  * Optional: `AXIOM_DATASET` (default `mongodb-mcp`)
  *
- * If ingest returns **403 Forbidden**, common fixes:
- * - **Personal tokens** need `AXIOM_ORG_ID` (organization ID from Axiom settings).
- * - **EU region** deployments often need `AXIOM_URL=https://api.eu.axiom.co` and optionally
- *   `AXIOM_EDGE=eu-central-1.aws.edge.axiom.co` for ingest (see Axiom docs for your deployment).
- * - Ensure the token can **ingest** into the target dataset (API token scopes / dataset ACLs).
+ * **Auth failures:** `@axiomhq/js` maps **HTTP 401** to `Error: forbidden` (misleading name). That usually
+ * means the token was rejected — wrong/expired token, wrong **region** (`AXIOM_URL`), or missing
+ * **`AXIOM_ORG_ID`** for personal (`xapt-...`) tokens. Create a new **API token** (`xaat-...`) with ingest
+ * access if unsure.
+ *
+ * **403 / other 4xx:** Response body may appear in logs when the API returns JSON `message`.
  *
  * Do not commit secrets; use environment variables or your process manager.
  */
@@ -38,7 +39,10 @@ export function getPearlmanaiAxiomDataset(): string {
     return process.env.AXIOM_DATASET?.trim() || "mongodb-mcp";
 }
 
-/** Format Axiom/fetch errors for journald (full message; 403 often truncates as "forbidd>"). */
+/**
+ * Format Axiom/fetch errors for journald.
+ * Note: `@axiomhq/js` FetchClient throws `new Error("forbidden")` for **HTTP 401** (see their fetchClient.js).
+ */
 function formatAxiomIngestError(err: unknown): string {
     if (err instanceof Error) {
         const bits: string[] = [`${err.name}: ${err.message}`];
@@ -58,6 +62,11 @@ function formatAxiomIngestError(err: unknown): string {
         const cause = (err as Error & { cause?: unknown }).cause;
         if (cause !== undefined) {
             bits.push(`cause=${formatAxiomIngestError(cause)}`);
+        }
+        if (err.message === "forbidden") {
+            bits.push(
+                "hint=axiom-js uses this message for HTTP 401: check token (new xaat- API token), AXIOM_URL region, AXIOM_ORG_ID if xapt- token"
+            );
         }
         return bits.join(" | ");
     }

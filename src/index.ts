@@ -97,7 +97,7 @@ async function main(): Promise<void> {
     if (isPearlmanaiAxiomEnabled()) {
         // stderr only — stdio MCP must keep stdout clean for JSON-RPC
         console.error(
-            `[pearlmanai-mongodb-mcp] Axiom logging enabled (dataset: ${getPearlmanaiAxiomDataset()}). Ingest 403? Set AXIOM_ORG_ID (personal tokens) and/or AXIOM_URL (e.g. EU: https://api.eu.axiom.co).`
+            `[pearlmanai-mongodb-mcp] Axiom logging enabled (dataset: ${getPearlmanaiAxiomDataset()}). Ingest shows Error: forbidden? That is HTTP 401 in axiom-js — fix token, AXIOM_URL (region), or AXIOM_ORG_ID (xapt- tokens).`
         );
     }
 
