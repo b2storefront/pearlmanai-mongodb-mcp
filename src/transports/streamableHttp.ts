@@ -481,6 +481,18 @@ class MCPHttpServer<TUserConfig extends UserConfig = UserConfig, TContext = unkn
         const handleSessionRequest = async (req: express.Request, res: express.Response): Promise<void> => {
             const sessionId = req.headers["mcp-session-id"];
             if (!sessionId) {
+                if (this.userConfig.externallyManagedSessions) {
+                    this.logger.debug({
+                        id: LogId.streamableHttpTransportSessionNotFound,
+                        context: "streamableHttpTransport",
+                        message:
+                            "Missing session ID with externallyManagedSessions enabled, initializing a new session",
+                    });
+                    return await initializeServer(req, res, {
+                        sessionId: getRandomUUID(),
+                        isImplicitInitialization: true,
+                    });
+                }
                 return this.reportSessionError(res, JSON_RPC_ERROR_CODE_SESSION_ID_REQUIRED);
             }
 
@@ -618,6 +630,19 @@ class MCPHttpServer<TUserConfig extends UserConfig = UserConfig, TContext = unkn
 
                 if (sessionId) {
                     return await handleSessionRequest(req, res);
+                }
+
+                if (this.userConfig.externallyManagedSessions) {
+                    this.logger.debug({
+                        id: LogId.streamableHttpTransportSessionNotFound,
+                        context: "streamableHttpTransport",
+                        message:
+                            "Request without session ID with externallyManagedSessions enabled, initializing a new session",
+                    });
+                    return await initializeServer(req, res, {
+                        sessionId: getRandomUUID(),
+                        isImplicitInitialization: true,
+                    });
                 }
 
                 return this.reportSessionError(res, JSON_RPC_ERROR_CODE_INVALID_REQUEST);
