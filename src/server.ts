@@ -330,6 +330,43 @@ export class Server<
                 this.tools.push(tool);
             }
         }
+
+        // Register MCP resources for tools that have UI components so clients
+        // can fetch them via the ui://tool-name URI declared in _meta.ui.resourceUri.
+        void this.registerUIResources();
+    }
+
+    private async registerUIResources(): Promise<void> {
+        if (!this.uiRegistry) {
+            return;
+        }
+
+        for (const tool of this.tools) {
+            if (!this.uiRegistry.has(tool.name)) {
+                continue;
+            }
+
+            const toolName = tool.name;
+            const uri = `ui://${toolName}`;
+
+            this.mcpServer.resource(
+                toolName,
+                uri,
+                { mimeType: "text/html;profile=mcp-app" },
+                async () => {
+                    const html = await this.uiRegistry!.get(toolName);
+                    return {
+                        contents: [
+                            {
+                                uri,
+                                mimeType: "text/html;profile=mcp-app" as const,
+                                text: html ?? "",
+                            },
+                        ],
+                    };
+                }
+            );
+        }
     }
 
     public registerResources(): void {

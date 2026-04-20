@@ -39,6 +39,18 @@ export class UIRegistry {
     }
 
     /**
+     * Returns true if a UI loader is registered for the given tool name.
+     * Synchronous — does not load the HTML.
+     */
+    has(toolName: string): boolean {
+        if (this.customUIs) {
+            // Can't know without calling; assume present and let get() resolve it.
+            return true;
+        }
+        return !!uiLoaders[toolName];
+    }
+
+    /**
      * Gets the UI HTML string for a tool, or null if none exists.
      */
     async get(toolName: string): Promise<string | null> {

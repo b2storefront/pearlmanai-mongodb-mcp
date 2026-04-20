@@ -753,6 +753,13 @@ export abstract class ToolBase<
             return false;
         }
 
+        const uiResourceUri = this.uiRegistry?.has(this.name) ? (`ui://${this.name}` as const) : undefined;
+
+        const meta: Record<string, unknown> = { ...this.toolMeta };
+        if (uiResourceUri) {
+            meta["ui"] = { resourceUri: uiResourceUri };
+        }
+
         this.registeredTool =
             // Note: We use explicit type casting here to avoid  "excessively deep and possibly infinite" errors
             // that occur when TypeScript tries to infer the complex generic types from `typeof this.argsShape`
@@ -776,7 +783,7 @@ export abstract class ToolBase<
                     inputSchema: this.argsShape,
                     outputSchema: this.outputSchema,
                     annotations: this.annotations,
-                    _meta: this.toolMeta,
+                    _meta: meta,
                 },
                 this.invoke.bind(this)
             );
@@ -994,6 +1001,9 @@ export abstract class ToolBase<
                 encoding: "text",
                 uiMetadata: {
                     "initial-render-data": result.structuredContent,
+                },
+                adapters: {
+                    mcpApps: { enabled: true },
                 },
             });
         }
