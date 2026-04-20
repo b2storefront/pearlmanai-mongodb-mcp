@@ -751,11 +751,14 @@ export abstract class ToolBase<
             return false;
         }
 
-        const uiResourceUri = this.uiRegistry?.has(this.name) ? (`ui://${this.name}` as const) : undefined;
+        const uiResourceUri = this.uiRegistry?.has(this.name)
+            ? (`ui://${this.name}/view.html` as const)
+            : undefined;
 
         const meta: Record<string, unknown> = { ...this.toolMeta };
         if (uiResourceUri) {
             meta["ui"] = { resourceUri: uiResourceUri };
+            meta["ui/resourceUri"] = uiResourceUri;
         }
 
         this.registeredTool =

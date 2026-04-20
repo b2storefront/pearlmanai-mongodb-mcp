@@ -348,7 +348,7 @@ export class Server<
             }
 
             const toolName = tool.name;
-            const uri = `ui://${toolName}`;
+            const uri = `ui://${toolName}/view.html`;
 
             this.mcpServer.resource(
                 toolName,
