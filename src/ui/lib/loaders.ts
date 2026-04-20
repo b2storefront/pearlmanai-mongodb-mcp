@@ -8,5 +8,9 @@ export const uiLoaders: Record<string, () => Promise<string>> = {
     "list-databases": async () => {
         const mod = await import("./tools/list-databases.js");
         return mod.ListDatabasesHtml;
+    },
+    "pearlmanai-parsed-reports-guide": async () => {
+        const mod = await import("./tools/pearlmanai-parsed-reports-guide.js");
+        return mod.PearlmanaiParsedReportsGuideHtml;
     }
 };
