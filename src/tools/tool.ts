@@ -979,10 +979,6 @@ export abstract class ToolBase<
      * @returns The result with UIResource appended if conditions are met, otherwise unchanged
      */
     private async appendUIResource(result: CallToolResult): Promise<CallToolResult> {
-        if (!this.isFeatureEnabled("mcpUI")) {
-            return result;
-        }
-
         let uiResource: UIResource | undefined;
         if (this.uiRegistry) {
             const uiHtml = await this.uiRegistry.get(this.name);
