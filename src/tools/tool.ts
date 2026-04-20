@@ -10,7 +10,6 @@ import type { Server } from "../server.js";
 import type { Elicitation } from "../elicitation.js";
 import type { PreviewFeature } from "../common/schemas.js";
 import type { UIRegistry } from "../ui/registry/index.js";
-import { createUIResource, type UIResource } from "@mcp-ui/server";
 import { TRANSPORT_PAYLOAD_LIMITS, type TransportType } from "../transports/constants.js";
 import { getRandomUUID } from "../helpers/getRandomUUID.js";
 import type { DefaultMetrics, Metrics } from "../common/metrics/index.js";
@@ -554,8 +553,7 @@ export abstract class ToolBase<
                 noRedaction: true,
             });
 
-            const toolCallResult = await this.execute(args, context);
-            const result = await this.appendUIResource(toolCallResult);
+            const result = await this.execute(args, context);
 
             this.emitToolEvent(args, { startTime, result });
 
@@ -979,43 +977,6 @@ export abstract class ToolBase<
         return metadata;
     }
 
-    /**
-     * Appends a UIResource to the tool result.
-     *
-     * @param result - The result from the tool's `execute()` method
-     * @returns The result with UIResource appended if conditions are met, otherwise unchanged
-     */
-    private async appendUIResource(result: CallToolResult): Promise<CallToolResult> {
-        let uiResource: UIResource | undefined;
-        if (this.uiRegistry) {
-            const uiHtml = await this.uiRegistry.get(this.name);
-            if (!uiHtml || !result.structuredContent) {
-                return result;
-            }
-            uiResource = createUIResource({
-                uri: `ui://${this.name}`,
-                content: {
-                    type: "rawHtml",
-                    htmlString: uiHtml,
-                },
-                encoding: "text",
-                uiMetadata: {
-                    "initial-render-data": result.structuredContent,
-                },
-                adapters: {
-                    mcpApps: { enabled: true },
-                },
-            });
-        }
-
-        const resultContent = result.content || [];
-        const content = uiResource ? [...resultContent, uiResource] : resultContent;
-
-        return {
-            ...result,
-            content,
-        };
-    }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

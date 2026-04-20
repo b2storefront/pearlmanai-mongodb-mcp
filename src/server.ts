@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Session } from "./common/session.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Resources } from "./resources/resources.js";
+import { wrapHtmlWithAdapters } from "@mcp-ui/server";
 import type { LogLevel } from "./common/logging/index.js";
 import { LogId, MCP_LOG_LEVELS } from "./common/logging/index.js";
 import type { Telemetry } from "./telemetry/telemetry.js";
@@ -355,12 +356,15 @@ export class Server<
                 { mimeType: "text/html;profile=mcp-app" },
                 async () => {
                     const html = await this.uiRegistry!.get(toolName);
+                    const wrapped = wrapHtmlWithAdapters(html ?? "", {
+                        mcpApps: { enabled: true },
+                    });
                     return {
                         contents: [
                             {
                                 uri,
                                 mimeType: "text/html;profile=mcp-app" as const,
-                                text: html ?? "",
+                                text: wrapped,
                             },
                         ],
                     };
