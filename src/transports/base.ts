@@ -339,7 +339,7 @@ export abstract class TransportRunnerBase<
         });
 
         let uiRegistry: UIRegistry | undefined = serverOptions?.uiRegistry;
-        if (!uiRegistry && userConfig.previewFeatures.includes("mcpUI")) {
+        if (!uiRegistry) {
             const uiRegistryModule = await import("../ui/registry/registry.js");
             uiRegistry = new uiRegistryModule.UIRegistry();
         }
