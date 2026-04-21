@@ -44,16 +44,17 @@ interface StylesOptions {
 }
 
 function getStyles({ dark }: StylesOptions) {
-    const bg = dark ? "#1a1a2e" : "#f8fafc";
-    const cardBg = dark ? "#16213e" : "#ffffff";
-    const border = dark ? "#2d3561" : "#e2e8f0";
-    const text = dark ? "#e2e8f0" : "#1e293b";
-    const textMuted = dark ? "#94a3b8" : "#64748b";
-    const accent = dark ? "#4f8ef7" : "#2563eb";
-    const tagBg = dark ? "#1e3a5f" : "#eff6ff";
-    const tagText = dark ? "#93c5fd" : "#1d4ed8";
-    const rowHover = dark ? "#1e2d4a" : "#f1f5f9";
-    const headerBg = dark ? "#0f172a" : "#f1f5f9";
+    // Palette matched to Claude's brand: warm neutral surfaces with a terracotta accent.
+    const bg = dark ? "#262624" : "#faf9f5";
+    const cardBg = dark ? "#2f2f2d" : "#ffffff";
+    const border = dark ? "#3d3d3a" : "#e8e6dc";
+    const text = dark ? "#f5f4ef" : "#3d3929";
+    const textMuted = dark ? "#a8a59e" : "#6b6558";
+    const accent = "#cc785c";
+    const tagBg = dark ? "#3a2f2a" : "#f5ebe4";
+    const tagText = dark ? "#e0a089" : "#a05a3f";
+    const rowHover = dark ? "#353533" : "#f2f0e8";
+    const headerBg = dark ? "#1f1f1d" : "#f2f0e8";
 
     return {
         root: {
