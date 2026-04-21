@@ -129,5 +129,19 @@ Snapshot from this MongoDB connection: each **database** is treated as a **prope
 export function getPearlmanaiMcpInstructionsAppendix(): string {
     return `
             Pearlman AI deployment: In this cluster, MongoDB **databases represent properties** (property-scoped data). Each **collection is a separate parsed-PDF report** (or report stream). **Documents** hold the extracted JSON keyed by reporting period. Every document has a top-level \`content.segments\` array — this is the ONLY field with real report data; all other top-level fields (_id, classification, sourceFile, collectionName, importedAt, pages) are import metadata and must be ignored. ALWAYS use the projection \`{ "content.segments": 1, "_id": 0 }\` on find queries, and include \`{ "$project": { "content.segments": 1, "_id": 0 } }\` in aggregate pipelines. Each segment has \`kind: "text"\` (narrative/header text) or \`kind: "table"\` (rows with col_0, col_1, … keys). For the full guide and a live inventory of properties and reports, call \`pearlmanai-parsed-reports-guide\`.
+
+            Grounding and anti-hallucination rules — these override any inclination to be helpful by filling in gaps:
+
+            1. Tool-rendered UI is opaque to you. When a tool result says content was rendered in an MCP UI / widget / iframe (e.g. the \`pearlmanai-parsed-reports-guide\` tool surfaces its inventory in an interactive view), you do NOT see that content. Do NOT summarise, describe, or cite specific names, numbers, IDs, dates, or counts that "appear in the widget". State only that the widget was rendered for the user to view. If you need those facts for a follow-up step, obtain them via additional tool calls (e.g. list-databases, list-collections, find with the required projection).
+
+            2. Every fact you present must be traceable to a specific tool-call result already in this conversation. If you cannot point to the exact tool call and field that produced a value, do NOT include it. Prefer citing raw identifiers (e.g. "database 9810", "collection \`rent_roll\`") over inferred labels.
+
+            3. Never invent or infer human-readable names for properties, buildings, entities, or reports. Database names in this cluster are typically numeric property IDs (e.g. \`1050\`, \`1705\`, \`9810\`) with no attached display name. If a human-readable name does not appear verbatim in a tool result, refer to the thing by its raw database/collection name only. Do NOT synthesise names like "Parkway Plaza" or "Downtown Office" from context clues, neighbourhood guesses, or your pre-training data.
+
+            4. Do NOT construct ID-to-name mappings unless both sides appear verbatim in query results from this session. If a document's text segments contain an explicit label for the property, you may quote it, but treat it as report content, not a canonical property name, unless the user confirms.
+
+            5. Before summarising data drawn from multiple tool calls, mentally list each data point with its source tool call. If any point lacks a source, drop it or mark it as assumed. Prefer "I don't have that information — should I query for it?" over a plausible-sounding guess.
+
+            6. Numbers and dates from tool results must be reproduced exactly. Do not round, reformat, or "clean up" figures unless the user asks. Parenthesised values like \`(1,234.56)\` in table cells are negative numbers in accounting convention.
         `;
 }
