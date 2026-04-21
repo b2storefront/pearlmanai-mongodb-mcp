@@ -242,8 +242,16 @@ function CollectionRow({
     );
 }
 
+interface McpAppsRenderData {
+    toolOutput?: {
+        structuredContent?: PearlmanaiGuideOutput;
+    };
+}
+
 export const PearlmanaiParsedReportsGuide = (): ReactElement | null => {
-    const { data, isLoading, error, darkMode } = useRenderData<PearlmanaiGuideOutput>();
+    const { data, isLoading, error, darkMode } = useRenderData<
+        PearlmanaiGuideOutput & McpAppsRenderData
+    >();
     const dark = darkMode ?? false;
     const s = getStyles({ dark });
 
@@ -255,8 +263,13 @@ export const PearlmanaiParsedReportsGuide = (): ReactElement | null => {
         return <div style={{ ...s.loadingText, color: "#ef4444" }}>Error: {error}</div>;
     }
 
-    const properties = data?.properties ?? [];
-    const generatedAt = data?.generatedAt ?? null;
+    // MCP Apps hosts (e.g. Claude) deliver the tool's CallToolResult via
+    // `renderData.toolOutput`, so structured payload lives at
+    // `data.toolOutput.structuredContent`. Legacy MCP-UI hosts surface the
+    // structured payload at the root of renderData, so fall back to that.
+    const structured = data?.toolOutput?.structuredContent ?? (data as PearlmanaiGuideOutput | undefined);
+    const properties = structured?.properties ?? [];
+    const generatedAt = structured?.generatedAt ?? null;
 
     return (
         <div style={s.root}>
