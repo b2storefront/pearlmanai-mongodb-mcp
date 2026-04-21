@@ -9,8 +9,12 @@ import { PEARL_MANAI_SYSTEM_DATABASES } from "../../common/pearlmanaiParsedRepor
 export const PearlmanaiGuideCollectionSchema = z.object({
     name: z.string(),
     documentCount: z.number(),
-    oldestImportedAt: z.string().nullable(),
-    newestImportedAt: z.string().nullable(),
+    // Oldest/newest reporting period extracted from the document text (ISO strings, null if
+    // no period could be determined). Prefers "Report Period: MM/YY" markers, falls back to
+    // the first M/D/YYYY date found in the document's text content.
+    oldestPeriod: z.string().nullable(),
+    newestPeriod: z.string().nullable(),
+    periodsFound: z.number(),
 });
 
 export const PearlmanaiGuidePropertySchema = z.object({
@@ -74,8 +78,9 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
                 collections.push({
                     name: colName,
                     documentCount: stats.count,
-                    oldestImportedAt: stats.oldest,
-                    newestImportedAt: stats.newest,
+                    oldestPeriod: stats.oldest,
+                    newestPeriod: stats.newest,
+                    periodsFound: stats.periodsFound,
                 });
             }
 
@@ -98,20 +103,101 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
         };
     }
 
+    /**
+     * Extract per-document reporting periods from free-text content.
+     *
+     * Pearlman's parsed reports do not store a structured period field — the reporting
+     * period lives inside `content.segments[*].text`. We concatenate segment text and run
+     * two regexes in preference order:
+     *   1. "Report Period: MM/YY"   → canonical month the report covers (day set to 1).
+     *   2. First "M/D/YYYY" date    → report-generation or period-end date (fallback).
+     *
+     * Collections where no match is found (e.g. `management_fee_calculation`) return
+     * null period bounds and `periodsFound: 0`.
+     */
     private async fetchCollectionStats(
         provider: Awaited<ReturnType<typeof this.ensureConnected>>,
         dbName: string,
         colName: string,
         signal: AbortSignal
-    ): Promise<{ count: number; oldest: string | null; newest: string | null }> {
+    ): Promise<{ count: number; oldest: string | null; newest: string | null; periodsFound: number }> {
         try {
             const pipeline = [
+                {
+                    $addFields: {
+                        _allText: {
+                            $reduce: {
+                                input: { $ifNull: ["$content.segments", []] },
+                                initialValue: "",
+                                in: { $concat: ["$$value", " ", { $ifNull: ["$$this.text", ""] }] },
+                            },
+                        },
+                    },
+                },
+                {
+                    $addFields: {
+                        _periodMatch: {
+                            $regexFind: {
+                                input: "$_allText",
+                                regex: /Report Period:\s*([0-9]{1,2})\/([0-9]{2,4})/,
+                                options: "i",
+                            },
+                        },
+                        _dateMatch: {
+                            $regexFind: {
+                                input: "$_allText",
+                                regex: /([0-9]{1,2})\/([0-9]{1,2})\/([0-9]{4})/,
+                            },
+                        },
+                    },
+                },
+                {
+                    $addFields: {
+                        _reportDate: {
+                            $cond: [
+                                { $ne: ["$_periodMatch", null] },
+                                {
+                                    $dateFromParts: {
+                                        year: {
+                                            $let: {
+                                                vars: { y: { $arrayElemAt: ["$_periodMatch.captures", 1] } },
+                                                in: {
+                                                    $cond: [
+                                                        { $lte: [{ $strLenCP: "$$y" }, 2] },
+                                                        { $toInt: { $concat: ["20", "$$y"] } },
+                                                        { $toInt: "$$y" },
+                                                    ],
+                                                },
+                                            },
+                                        },
+                                        month: { $toInt: { $arrayElemAt: ["$_periodMatch.captures", 0] } },
+                                        day: 1,
+                                    },
+                                },
+                                {
+                                    $cond: [
+                                        { $ne: ["$_dateMatch", null] },
+                                        {
+                                            $dateFromParts: {
+                                                year: { $toInt: { $arrayElemAt: ["$_dateMatch.captures", 2] } },
+                                                month: { $toInt: { $arrayElemAt: ["$_dateMatch.captures", 0] } },
+                                                day: { $toInt: { $arrayElemAt: ["$_dateMatch.captures", 1] } },
+                                            },
+                                        },
+                                        null,
+                                    ],
+                                },
+                            ],
+                        },
+                    },
+                },
                 {
                     $group: {
                         _id: null,
                         count: { $sum: 1 },
-                        oldest: { $min: "$importedAt" },
-                        newest: { $max: "$importedAt" },
+                        oldest: { $min: "$_reportDate" },
+                        newest: { $max: "$_reportDate" },
+                        periodsFound: { $sum: { $cond: [{ $ne: ["$_reportDate", null] }, 1, 0] } },
                     },
                 },
             ];
@@ -123,17 +209,42 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
             }
 
             if (results.length === 0 || !results[0]) {
-                return { count: 0, oldest: null, newest: null };
+                return { count: 0, oldest: null, newest: null, periodsFound: 0 };
             }
 
-            const row = results[0] as { count?: number; oldest?: unknown; newest?: unknown };
+            const row = results[0] as {
+                count?: number;
+                oldest?: unknown;
+                newest?: unknown;
+                periodsFound?: number;
+            };
+            const toIso = (v: unknown): string | null =>
+                v instanceof Date ? v.toISOString() : typeof v === "string" ? v : null;
+
             return {
                 count: typeof row.count === "number" ? row.count : 0,
-                oldest: row.oldest instanceof Date ? row.oldest.toISOString() : (typeof row.oldest === "string" ? row.oldest : null),
-                newest: row.newest instanceof Date ? row.newest.toISOString() : (typeof row.newest === "string" ? row.newest : null),
+                oldest: toIso(row.oldest),
+                newest: toIso(row.newest),
+                periodsFound: typeof row.periodsFound === "number" ? row.periodsFound : 0,
             };
         } catch {
-            return { count: 0, oldest: null, newest: null };
+            // Fallback: at least return the count if the period aggregation fails.
+            try {
+                const pipeline = [{ $group: { _id: null, count: { $sum: 1 } } }];
+                const cursor = provider.aggregate(dbName, colName, pipeline, { signal });
+                for await (const doc of cursor) {
+                    const row = doc as { count?: number };
+                    return {
+                        count: typeof row.count === "number" ? row.count : 0,
+                        oldest: null,
+                        newest: null,
+                        periodsFound: 0,
+                    };
+                }
+            } catch {
+                // ignore
+            }
+            return { count: 0, oldest: null, newest: null, periodsFound: 0 };
         }
     }
 }

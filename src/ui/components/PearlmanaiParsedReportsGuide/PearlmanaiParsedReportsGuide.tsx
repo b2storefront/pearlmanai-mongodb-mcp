@@ -15,10 +15,28 @@ function formatDate(iso: string | null): string {
     }
 }
 
-function formatTimespan(oldest: string | null, newest: string | null): string {
-    if (!oldest && !newest) return "No dates";
-    if (oldest === newest) return formatDate(oldest);
-    return `${formatDate(oldest)} → ${formatDate(newest)}`;
+function formatMonth(iso: string | null): string {
+    if (!iso) return "—";
+    try {
+        return new Date(iso).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+        });
+    } catch {
+        return iso;
+    }
+}
+
+function formatPeriodRange(
+    oldest: string | null,
+    newest: string | null,
+    periodsFound: number,
+    totalDocs: number
+): string {
+    if (periodsFound === 0 || (!oldest && !newest)) return "No period info";
+    if (oldest === newest) return formatMonth(oldest);
+    const coverage = periodsFound < totalDocs ? ` (${periodsFound}/${totalDocs})` : "";
+    return `${formatMonth(oldest)} → ${formatMonth(newest)}${coverage}`;
 }
 
 interface StylesOptions {
@@ -43,7 +61,6 @@ function getStyles({ dark }: StylesOptions) {
             fontSize: "13px",
             color: text,
             background: bg,
-            minHeight: "100vh",
             padding: "20px",
             boxSizing: "border-box" as const,
         },
@@ -235,7 +252,12 @@ function CollectionRow({
             </td>
             <td style={s.td}>
                 <span style={s.timespanText}>
-                    {formatTimespan(col.oldestImportedAt, col.newestImportedAt)}
+                    {formatPeriodRange(
+                        col.oldestPeriod,
+                        col.newestPeriod,
+                        col.periodsFound,
+                        col.documentCount
+                    )}
                 </span>
             </td>
         </tr>

@@ -34,6 +34,48 @@ for (const [path, module] of Object.entries(componentModules)) {
     }
 }
 
+/**
+ * Notify the host (via postMessage) whenever our content size changes so the
+ * iframe can be resized to fit. The `@mcp-ui/server` MCP Apps adapter bridge
+ * that wraps this bundle translates `ui-size-change` messages to the
+ * `ui/notifications/size-changed` JSON-RPC notification consumed by MCP Apps
+ * hosts like Claude. Without this, the iframe defaults to a very small height.
+ */
+function setupSizeChangeNotifications(): () => void {
+    let lastWidth = 0;
+    let lastHeight = 0;
+    let scheduled = false;
+
+    const measureAndSend = (): void => {
+        if (scheduled) return;
+        scheduled = true;
+        requestAnimationFrame(() => {
+            scheduled = false;
+            const el = document.documentElement;
+            // Temporarily let the root grow to natural content height so we
+            // report the full required size rather than the current clipped size.
+            const prevHeight = el.style.height;
+            el.style.height = "max-content";
+            const height = Math.ceil(el.getBoundingClientRect().height);
+            el.style.height = prevHeight;
+            const width = Math.ceil(window.innerWidth);
+            if (width === lastWidth && height === lastHeight) return;
+            lastWidth = width;
+            lastHeight = height;
+            window.parent.postMessage(
+                { type: "ui-size-change", payload: { width, height } },
+                "*"
+            );
+        });
+    };
+
+    measureAndSend();
+    const observer = new ResizeObserver(measureAndSend);
+    observer.observe(document.documentElement);
+    observer.observe(document.body);
+    return () => observer.disconnect();
+}
+
 function mount(): void {
     const container = document.getElementById("root");
     if (!container) {
@@ -60,6 +102,8 @@ function mount(): void {
             <Component />
         </React.StrictMode>
     );
+
+    setupSizeChangeNotifications();
 }
 
 mount();
