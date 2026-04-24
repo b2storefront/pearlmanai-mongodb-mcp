@@ -76,16 +76,16 @@ function formatReportName(raw: string): string {
         .join(" ");
 }
 
-function formatPeriodRange(
+function formatMonthRange(
     oldest: string | null,
     newest: string | null,
-    periodsFound: number,
-    totalDocs: number
+    withReportMonth: number,
+    documentCount: number
 ): string {
-    if (periodsFound === 0 || (!oldest && !newest)) return "No period info";
+    if (withReportMonth === 0 || (!oldest && !newest)) return "—";
     if (oldest === newest) return formatMonth(oldest);
-    const coverage = periodsFound < totalDocs ? ` (${periodsFound}/${totalDocs})` : "";
-    return `${formatMonth(oldest)} → ${formatMonth(newest)}${coverage}`;
+    const partial = withReportMonth < documentCount ? ` (${withReportMonth}/${documentCount})` : "";
+    return `${formatMonth(oldest)} → ${formatMonth(newest)}${partial}`;
 }
 
 interface StylesOptions {
@@ -259,26 +259,30 @@ function PropertyCard({
                 <div style={s.dbIcon}>{initials}</div>
                 <span style={s.dbName}>{property.dbName}</span>
                 <span style={s.collectionCount}>
-                    {property.collections.length}{" "}
-                    {property.collections.length === 1 ? "report" : "reports"}
+                    {property.reports.length} {property.reports.length === 1 ? "report" : "reports"}
                 </span>
             </div>
-            {property.collections.length === 0 ? (
-                <div style={s.emptyRow}>No collections</div>
+            {property.reports.length === 0 ? (
+                <div style={s.emptyRow}>No reports</div>
             ) : (
                 <table style={s.table}>
                     <thead>
                         <tr style={s.thRow}>
-                            <th style={s.th}>Report (collection)</th>
-                            <th style={{ ...s.th, textAlign: "center" }}>Docs</th>
-                            <th style={s.th} title="Min/max month from reportMonth or reportDataMonth (YYYY-MM) only; not parsed from segment text.">
-                                Timespan
+                            <th style={s.th}>Report</th>
+                            <th style={{ ...s.th, textAlign: "center" }} title="One document = one month">
+                                Months
+                            </th>
+                            <th
+                                style={s.th}
+                                title="Earliest to latest `reportMonth` (YYYY-MM) on documents in this report."
+                            >
+                                Month range
                             </th>
                         </tr>
                     </thead>
                     <tbody>
-                        {property.collections.map((col) => (
-                            <CollectionRow key={col.name} col={col} s={s} />
+                        {property.reports.map((report) => (
+                            <ReportRow key={report.name} report={report} s={s} />
                         ))}
                     </tbody>
                 </table>
@@ -287,31 +291,31 @@ function PropertyCard({
     );
 }
 
-function CollectionRow({
-    col,
+function ReportRow({
+    report,
     s,
 }: {
-    col: PearlmanaiGuideOutput["properties"][number]["collections"][number];
+    report: PearlmanaiGuideOutput["properties"][number]["reports"][number];
     s: ReturnType<typeof getStyles>;
 }): ReactElement {
-    const displayName = formatReportName(col.name);
+    const displayName = formatReportName(report.name);
     return (
         <tr>
             <td style={s.td}>
-                <span style={s.collectionName} title={col.name}>
+                <span style={s.collectionName} title={report.name}>
                     {displayName}
                 </span>
             </td>
             <td style={{ ...s.td, textAlign: "center" }}>
-                <span style={s.countBadge}>{col.documentCount}</span>
+                <span style={s.countBadge}>{report.documentCount}</span>
             </td>
             <td style={s.td}>
                 <span style={s.timespanText}>
-                    {formatPeriodRange(
-                        col.oldestPeriod,
-                        col.newestPeriod,
-                        col.periodsFound,
-                        col.documentCount
+                    {formatMonthRange(
+                        report.oldestPeriod,
+                        report.newestPeriod,
+                        report.withReportMonth,
+                        report.documentCount
                     )}
                 </span>
             </td>
@@ -351,13 +355,14 @@ export const PearlmanaiParsedReportsGuide = (): ReactElement | null => {
     return (
         <div style={s.root}>
             <div style={s.header}>
-                <h2 style={s.title}>Pearlman AI — Properties &amp; Reports</h2>
+                <h2 style={s.title}>Pearlman AI — Properties &amp; reports</h2>
                 <p style={s.subtitle}>
                     {generatedAt
                         ? `Snapshot from ${formatDate(generatedAt)} · `
                         : ""}
                     {properties.length} {properties.length === 1 ? "property" : "properties"} ·{" "}
-                    {properties.reduce((n, p) => n + p.collections.length, 0)} reports total
+                    {properties.reduce((n, p) => n + p.reports.length, 0)} reports · one
+                    document = one month; month range from reportMonth only
                 </p>
             </div>
 

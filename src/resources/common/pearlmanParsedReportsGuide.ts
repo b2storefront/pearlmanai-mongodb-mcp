@@ -16,7 +16,7 @@ export class PearlmanParsedReportsGuideResource extends ReactiveResource<true, r
                 contentMimeType: "text/markdown",
                 config: {
                     description:
-                        "Pearlman AI: static guide for parsed PDF reports in MongoDB (databases ≈ properties, collections ≈ reports). For a live list of databases and collections, use the pearlmanai-parsed-reports-guide tool.",
+                        "Pearlman AI: static guide (properties ≈ databases, reports ≈ collections, one document = one month via reportMonth). For a live inventory, use pearlmanai-parsed-reports-guide.",
                 },
             },
             options: {

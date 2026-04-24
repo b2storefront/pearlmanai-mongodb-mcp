@@ -6,19 +6,22 @@ import type { OperationType, ToolCategory } from "../tool.js";
 import { PEARL_MANAI_GUIDE_HIDDEN_DATABASES } from "../../common/pearlmanaiConversationLog.js";
 import { PEARL_MANAI_SYSTEM_DATABASES } from "../../common/pearlmanaiParsedReportsGuide.js";
 
-export const PearlmanaiGuideCollectionSchema = z.object({
+export const PearlmanaiGuideReportSchema = z.object({
+    /** MongoDB collection name (one report per property). */
     name: z.string(),
+    /** One document = one month for this report. */
     documentCount: z.number(),
-    // Oldest/newest month from `reportMonth` / `reportDataMonth` only (YYYY-MM → ISO).
-    // Documents without a valid month field are excluded from the Timespan min/max; see periodsFound.
+    /** Earliest `reportMonth` in this report (ISO, start of month). */
     oldestPeriod: z.string().nullable(),
+    /** Latest `reportMonth` in this report (ISO, start of month). */
     newestPeriod: z.string().nullable(),
-    periodsFound: z.number(),
+    /** Documents with a valid `reportMonth` included in the range (normally equals documentCount). */
+    withReportMonth: z.number(),
 });
 
 export const PearlmanaiGuidePropertySchema = z.object({
     dbName: z.string(),
-    collections: z.array(PearlmanaiGuideCollectionSchema),
+    reports: z.array(PearlmanaiGuideReportSchema),
 });
 
 export const PearlmanaiGuideOutputSchema = {
@@ -29,8 +32,8 @@ export const PearlmanaiGuideOutputSchema = {
 export type PearlmanaiGuideOutput = z.infer<z.ZodObject<typeof PearlmanaiGuideOutputSchema>>;
 
 /**
- * Pearlman domain guide plus a live list of databases (properties) and collections (reports).
- * Returns both markdown text content and structured output for UI rendering.
+ * Pearlman domain guide: list every property (database), every report (collection), document counts
+ * and month span from `reportMonth` only. One document = one month.
  */
 export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
     static toolName = "pearlmanai-parsed-reports-guide";
@@ -38,7 +41,7 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
     static operationType: OperationType = "metadata";
 
     public description =
-        "Pearlman AI: explains how this MongoDB stores parsed PDF reports, and lists all current non-system databases (properties) with their collections (reports) and per-collection TimeSpan from `reportMonth` / `reportDataMonth` only. Requires an active MongoDB connection.";
+        "Pearlman AI: how parsed PDFs are stored, plus a full inventory: each property (database), each report (collection) with a document count (one month per document), and the month range from `reportMonth` only. Requires an active MongoDB connection.";
 
     public argsShape = {};
     public override outputSchema = PearlmanaiGuideOutputSchema;
@@ -63,36 +66,36 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
 
         for (const dbName of propertyDbNames) {
             const cols = await provider.listCollections(dbName, {}, { signal: context.signal });
-            const collectionNames = cols
+            const reportNames = cols
                 .map((c) => c.name as string)
                 .filter((n) => !n.startsWith("system."))
                 .sort((a, b) => a.localeCompare(b));
 
-            inventoryItems.push({ propertyDbName: dbName, reportCollections: collectionNames });
+            inventoryItems.push({ propertyDbName: dbName, reportCollections: reportNames });
 
-            const collections: PearlmanaiGuideOutput["properties"][number]["collections"] = [];
+            const reports: PearlmanaiGuideOutput["properties"][number]["reports"] = [];
 
-            for (const colName of collectionNames) {
-                const stats = await this.fetchCollectionStats(provider, dbName, colName, context.signal);
-                collections.push({
-                    name: colName,
+            for (const reportName of reportNames) {
+                const stats = await this.fetchReportStats(provider, dbName, reportName, context.signal);
+                reports.push({
+                    name: reportName,
                     documentCount: stats.count,
                     oldestPeriod: stats.oldest,
                     newestPeriod: stats.newest,
-                    periodsFound: stats.periodsFound,
+                    withReportMonth: stats.withReportMonth,
                 });
             }
 
-            properties.push({ dbName, collections });
+            properties.push({ dbName, reports });
         }
 
-        const totalReports = properties.reduce((n, p) => n + p.collections.length, 0);
+        const totalReports = properties.reduce((n, p) => n + p.reports.length, 0);
 
         return {
             content: [
                 {
                     type: "text",
-                    text: `Found ${properties.length} ${properties.length === 1 ? "property" : "properties"} with ${totalReports} ${totalReports === 1 ? "report" : "reports"} total. See the UI for the full inventory.`,
+                    text: `Found ${properties.length} ${properties.length === 1 ? "property" : "properties"} and ${totalReports} ${totalReports === 1 ? "report" : "reports"} (collections). Each document is one month; the UI lists counts and the month range from \`reportMonth\` only.`,
                 },
             ],
             structuredContent: {
@@ -103,95 +106,73 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
     }
 
     /**
-     * Timespan (oldest/newest) uses only `reportMonth`, else legacy `reportDataMonth`
-     * when both are strings matching `YYYY-MM`. No text/segment heuristics.
+     * `reportMonth` only: string `YYYY-MM` or BSON date → sortable first-of-month date for min/max.
      */
-    private async fetchCollectionStats(
+    private async fetchReportStats(
         provider: Awaited<ReturnType<typeof this.ensureConnected>>,
         dbName: string,
         colName: string,
         signal: AbortSignal
-    ): Promise<{ count: number; oldest: string | null; newest: string | null; periodsFound: number }> {
-        try {
-            const yyyymmRegex = "^(\\d{4})-(\\d{2})$";
-            const pipeline = [
-                {
-                    $addFields: {
-                        _reportFromStored: {
-                            $cond: [
-                                {
-                                    $regexMatch: {
-                                        input: { $toString: { $ifNull: ["$reportMonth", ""] } },
-                                        regex: yyyymmRegex,
-                                    },
-                                },
-                                {
-                                    $dateFromString: {
-                                        dateString: {
-                                            $concat: [{ $toString: { $ifNull: ["$reportMonth", ""] } }, "-01"],
-                                        },
-                                        onError: null,
-                                        onNull: null,
-                                    },
-                                },
-                                {
-                                    $cond: [
-                                        {
-                                            $regexMatch: {
-                                                input: { $toString: { $ifNull: ["$reportDataMonth", ""] } },
-                                                regex: yyyymmRegex,
-                                            },
-                                        },
-                                        {
-                                            $dateFromString: {
-                                                dateString: {
-                                                    $concat: [
-                                                        { $toString: { $ifNull: ["$reportDataMonth", ""] } },
-                                                        "-01",
-                                                    ],
-                                                },
-                                                onError: null,
-                                                onNull: null,
-                                            },
-                                        },
-                                        null,
-                                    ],
-                                },
-                            ],
-                        },
-                    },
+    ): Promise<{ count: number; oldest: string | null; newest: string | null; withReportMonth: number }> {
+        const yyyyMmStringToDate = (field: string) => ({
+            $dateFromString: {
+                dateString: { $concat: [field, "-01"] },
+                onError: null,
+                onNull: null,
+            },
+        });
+        const isYyyyMmString = (field: string) => ({
+            $and: [
+                { $eq: [{ $type: field }, "string"] },
+                { $eq: [{ $strLenCP: field }, 7] },
+                { $eq: [{ $substrCP: [field, 4, 1] }, "-"] },
+            ],
+        });
+        const firstOfMonthFromDate = (field: string) => ({
+            $dateFromParts: {
+                year: { $year: field },
+                month: { $month: field },
+                day: 1,
+            },
+        });
+        const reportMonthToDate = {
+            $switch: {
+                branches: [
+                    { case: { $eq: [{ $type: "$reportMonth" }, "date"] }, then: firstOfMonthFromDate("$reportMonth") },
+                    { case: isYyyyMmString("$reportMonth"), then: yyyyMmStringToDate("$reportMonth") },
+                ],
+                default: null,
+            },
+        };
+        const pipeline = [
+            { $addFields: { _reportDate: reportMonthToDate } },
+            {
+                $group: {
+                    _id: null,
+                    count: { $sum: 1 },
+                    oldest: { $min: "$_reportDate" },
+                    newest: { $max: "$_reportDate" },
+                    withReportMonth: { $sum: { $cond: [{ $ne: ["$_reportDate", null] }, 1, 0] } },
                 },
-                {
-                    $addFields: {
-                        _reportDate: "$_reportFromStored",
-                    },
-                },
-                {
-                    $group: {
-                        _id: null,
-                        count: { $sum: 1 },
-                        oldest: { $min: "$_reportDate" },
-                        newest: { $max: "$_reportDate" },
-                        periodsFound: { $sum: { $cond: [{ $ne: ["$_reportDate", null] }, 1, 0] } },
-                    },
-                },
-            ];
+            },
+        ];
 
+        try {
             const cursor = provider.aggregate(dbName, colName, pipeline, { signal });
-            const results = [];
+            const results: unknown[] = [];
             for await (const doc of cursor) {
                 results.push(doc);
             }
 
             if (results.length === 0 || !results[0]) {
-                return { count: 0, oldest: null, newest: null, periodsFound: 0 };
+                return { count: 0, oldest: null, newest: null, withReportMonth: 0 };
             }
 
             const row = results[0] as {
                 count?: number;
                 oldest?: unknown;
                 newest?: unknown;
-                periodsFound?: number;
+                withReportMonth?: number;
             };
             const toIso = (v: unknown): string | null =>
                 v instanceof Date ? v.toISOString() : typeof v === "string" ? v : null;
@@ -200,26 +181,25 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
                 count: typeof row.count === "number" ? row.count : 0,
                 oldest: toIso(row.oldest),
                 newest: toIso(row.newest),
-                periodsFound: typeof row.periodsFound === "number" ? row.periodsFound : 0,
+                withReportMonth: typeof row.withReportMonth === "number" ? row.withReportMonth : 0,
             };
         } catch {
-            // Fallback: at least return the count if the period aggregation fails.
             try {
-                const pipeline = [{ $group: { _id: null, count: { $sum: 1 } } }];
-                const cursor = provider.aggregate(dbName, colName, pipeline, { signal });
+                const countPipeline = [{ $group: { _id: null, count: { $sum: 1 } } }];
+                const cursor = provider.aggregate(dbName, colName, countPipeline, { signal });
                 for await (const doc of cursor) {
                     const row = doc as { count?: number };
                     return {
                         count: typeof row.count === "number" ? row.count : 0,
                         oldest: null,
                         newest: null,
-                        periodsFound: 0,
+                        withReportMonth: 0,
                     };
                 }
             } catch {
                 // ignore
             }
-            return { count: 0, oldest: null, newest: null, periodsFound: 0 };
+            return { count: 0, oldest: null, newest: null, withReportMonth: 0 };
         }
     }
 }
