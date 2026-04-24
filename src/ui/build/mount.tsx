@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import "../styles/fonts.css";
-import React from "react";
+import React, { Component, type ErrorInfo, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
 // Type for component modules loaded via glob import
@@ -35,6 +35,47 @@ for (const [path, module] of Object.entries(componentModules)) {
 }
 
 /**
+ * Some MCP-UI hosts set the tool iframe’s height to the last `ui-size-change`
+ * payload. A **zero** (or sub-pixel) first measure makes the whole widget
+ * “disappear” even though the React tree rendered. We enforce a small floor
+ * and defer the first report until after a paint.
+ */
+const MIN_UI_SIZE_PX = 200;
+
+class ToolUiErrorBoundary extends Component<{ children: ReactNode }, { err: Error | null }> {
+    constructor(props: { children: ReactNode }) {
+        super(props);
+        this.state = { err: null };
+    }
+
+    static getDerivedStateFromError(err: Error): { err: Error } {
+        return { err };
+    }
+
+    override componentDidCatch(err: Error, info: ErrorInfo): void {
+        console.error("[mount] Tool UI render error:", err, info?.componentStack);
+    }
+
+    override render(): ReactNode {
+        if (this.state.err) {
+            return (
+                <div
+                    style={{
+                        fontFamily: "system-ui, sans-serif",
+                        fontSize: 13,
+                        color: "#b91c1c",
+                        padding: 16,
+                    }}
+                >
+                    Guide UI error: {this.state.err?.message || String(this.state.err)} (open DevTools for stack)
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+
+/**
  * Notify the host (via postMessage) whenever our content size changes so the
  * iframe can be resized to fit. The `@mcp-ui/server` MCP Apps adapter bridge
  * that wraps this bundle translates `ui-size-change` messages to the
@@ -56,9 +97,10 @@ function setupSizeChangeNotifications(): () => void {
             // report the full required size rather than the current clipped size.
             const prevHeight = el.style.height;
             el.style.height = "max-content";
-            const height = Math.ceil(el.getBoundingClientRect().height);
+            const rawH = el.getBoundingClientRect().height;
             el.style.height = prevHeight;
-            const width = Math.ceil(window.innerWidth);
+            const height = Math.max(MIN_UI_SIZE_PX, Math.ceil(rawH));
+            const width = Math.max(64, Math.ceil(window.innerWidth));
             if (width === lastWidth && height === lastHeight) return;
             lastWidth = width;
             lastHeight = height;
@@ -69,7 +111,14 @@ function setupSizeChangeNotifications(): () => void {
         });
     };
 
-    measureAndSend();
+    // Two rAFs: first paint (incl. React) before measuring, reduces height=0
+    // reports that collapse the iframe in strict hosts.
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            measureAndSend();
+        });
+    });
+
     const observer = new ResizeObserver(measureAndSend);
     observer.observe(document.documentElement);
     observer.observe(document.body);
@@ -97,11 +146,18 @@ function mount(): void {
     }
 
     const root = createRoot(container);
-    root.render(
+    const tree = import.meta.env.DEV ? (
         <React.StrictMode>
-            <Component />
+            <ToolUiErrorBoundary>
+                <Component />
+            </ToolUiErrorBoundary>
         </React.StrictMode>
+    ) : (
+        <ToolUiErrorBoundary>
+            <Component />
+        </ToolUiErrorBoundary>
     );
+    root.render(tree);
 
     setupSizeChangeNotifications();
 }

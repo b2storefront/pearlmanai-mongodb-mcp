@@ -4,6 +4,17 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>{{TITLE}}</title>
+        <!-- Avoid zero-height iframe: MCP hosts that size the tool iframe to
+             ui-size-change may collapse the panel if the first measure is 0. -->
+        <style>
+            html,
+            body {
+                margin: 0;
+            }
+            #root {
+                min-height: 200px;
+            }
+        </style>
     </head>
     <body>
         <div id="root" data-component="{{COMPONENT_NAME}}"></div>
