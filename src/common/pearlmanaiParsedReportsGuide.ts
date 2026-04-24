@@ -39,7 +39,7 @@ Every document in every report collection follows this shape:
 }
 \`\`\`
 
-**Report body data** is in \`content.segments\` only. For **which calendar month** the report applies to, use the top-level \`reportMonth\` field (string \`YYYY-MM\`) when it is set — the \`pearlmanai-parsed-reports-guide\` tool and inventory UIs use \`reportMonth\` (or legacy \`reportDataMonth\` in the same format) to compute per-collection time ranges, and only fall back to dates parsed from segment text if those fields are missing. Other import metadata fields (\`classification\`, \`sourceFile\`, \`collectionName\`, \`importedAt\`, \`pages\`) are not the analytical table/figure data.
+**Report body data** is in \`content.segments\` only. **Calendar month** for a document is the top-level \`reportMonth\` (string \`YYYY-MM\`; legacy \`reportDataMonth\` in the same shape may exist on older docs). The \`pearlmanai-parsed-reports-guide\` tool’s **Timespan** column uses **only** \`reportMonth\` / \`reportDataMonth\` — never segment text. When **finding or filtering** documents by month or date range, you MUST \`$match\` on \`reportMonth\` (and optionally \`reportDataMonth\` for older data), not on dates parsed from \`content.segments\`. Other import metadata (\`classification\`, \`sourceFile\`, \`collectionName\`, \`importedAt\`, \`pages\`) is not the analytical table/figure data.
 
 Each segment has a \`kind\` field:
 - \`"text"\` — a block of narrative text from the PDF (e.g. header, footer, property name, report title). Often contains the property address, report period, and report type.
@@ -47,23 +47,23 @@ Each segment has a \`kind\` field:
 
 ### MANDATORY querying rules
 
-**Always project to \`content.segments\` only.** Do not return full documents — the metadata fields waste context and add no analytical value.
+**For report body content**, project \`content.segments\` (and include \`reportMonth\` when the question involves time period or you need to filter by month in a follow-up). Do not return full documents — unrelated metadata wastes context.
 
-**For \`find\` queries**, always include this projection:
+**For \`find\` queries** (adjust when you also need the month key):
 \`\`\`json
-{ "projection": { "content.segments": 1, "_id": 0 } }
+{ "projection": { "content.segments": 1, "reportMonth": 1, "_id": 0 } }
 \`\`\`
 
-**For \`aggregate\` pipelines**, add a \`$project\` stage immediately after any \`$match\`:
+**For \`aggregate\` pipelines**, \`$match\` on \`reportMonth\` **before** heavy stages when the user’s question is for a specific month. Add \`$project\` with segments + \`reportMonth\` after the match:
 \`\`\`json
-{ "$project": { "content.segments": 1, "_id": 0 } }
+{ "$project": { "content.segments": 1, "reportMonth": 1, "_id": 0 } }
 \`\`\`
 
 **To work with table rows across multiple documents**, use \`$unwind\` to flatten segments, then filter by \`kind\`:
 \`\`\`json
 [
-  { "$match": { ... } },
-  { "$project": { "content.segments": 1, "_id": 0 } },
+  { "$match": { "reportMonth": "2025-06" } },
+  { "$project": { "content.segments": 1, "reportMonth": 1, "_id": 0 } },
   { "$unwind": "$content.segments" },
   { "$match": { "content.segments.kind": "table" } },
   { "$replaceRoot": { "newRoot": "$content.segments" } }
@@ -129,7 +129,7 @@ Snapshot from this MongoDB connection: each **database** is treated as a **prope
  */
 export function getPearlmanaiMcpInstructionsAppendix(): string {
     return `
-            Pearlman AI deployment: In this cluster, MongoDB **databases represent properties** (property-scoped data). Each **collection is a separate parsed-PDF report** (or report stream). **Documents** hold the extracted JSON keyed by reporting period. Every document has a top-level \`content.segments\` array — this is the ONLY field with real report data; all other top-level fields (_id, classification, sourceFile, collectionName, importedAt, pages) are import metadata and must be ignored. ALWAYS use the projection \`{ "content.segments": 1, "_id": 0 }\` on find queries, and include \`{ "$project": { "content.segments": 1, "_id": 0 } }\` in aggregate pipelines. Each segment has \`kind: "text"\` (narrative/header text) or \`kind: "table"\` (rows with col_0, col_1, … keys). For the full guide and a live inventory of properties and reports, call \`pearlmanai-parsed-reports-guide\`.
+            Pearlman AI deployment: In this cluster, MongoDB **databases represent properties** (property-scoped data). Each **collection is a separate parsed-PDF report** (or report stream). **Documents** hold extracted table/text in \`content.segments\` — the field with real report *body* data. The top-level string \`reportMonth\` (format \`YYYY-MM\`; legacy \`reportDataMonth\` in the same shape on older documents) is the **canonical calendar month** for that document. When listing, finding, or filtering reports or documents **by month or date range**, you MUST use \`reportMonth\` in \`$match\` / filter conditions (e.g. \`{ "reportMonth": "2025-06" }\` or range on string order within the same year-month convention). **Do not** infer the reporting month from \`content.segments\` text, headers, or ad-hoc regex on narrative text for query selection. The \`pearlmanai-parsed-reports-guide\` tool’s Timespan column is derived **only** from \`reportMonth\` / \`reportDataMonth\`, not from segment parsing. For find/aggregate, use projection \`{ "content.segments": 1, "reportMonth": 1, "_id": 0 }\` (plus other fields only if the user explicitly needs them). Each segment has \`kind: "text"\` or \`kind: "table"\` (rows with col_0, col_1, …). Import metadata (classification, sourceFile, collectionName, importedAt, pages) is not report body data. For the full guide and a live inventory, call \`pearlmanai-parsed-reports-guide\`.
 
             Grounding and anti-hallucination rules — these override any inclination to be helpful by filling in gaps:
 
@@ -144,5 +144,7 @@ export function getPearlmanaiMcpInstructionsAppendix(): string {
             5. Before summarising data drawn from multiple tool calls, mentally list each data point with its source tool call. If any point lacks a source, drop it or mark it as assumed. Prefer "I don't have that information — should I query for it?" over a plausible-sounding guess.
 
             6. Numbers and dates from tool results must be reproduced exactly. Do not round, reformat, or "clean up" figures unless the user asks. Parenthesised values like \`(1,234.56)\` in table cells are negative numbers in accounting convention.
+
+            7. For any question that depends on **which calendar month** or **date range** a report row belongs to, your MongoDB query MUST filter using the \`reportMonth\` field (and \`reportDataMonth\` only when you are clearly dealing with legacy documents). Do not select or exclude documents based on dates or month names parsed from \`content.segments\` text alone.
         `;
 }

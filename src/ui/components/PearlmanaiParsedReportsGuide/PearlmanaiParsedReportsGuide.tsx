@@ -271,7 +271,9 @@ function PropertyCard({
                         <tr style={s.thRow}>
                             <th style={s.th}>Report (collection)</th>
                             <th style={{ ...s.th, textAlign: "center" }}>Docs</th>
-                            <th style={s.th}>Timespan</th>
+                            <th style={s.th} title="Min/max month from reportMonth or reportDataMonth (YYYY-MM) only; not parsed from segment text.">
+                                Timespan
+                            </th>
                         </tr>
                     </thead>
                     <tbody>

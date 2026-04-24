@@ -9,9 +9,8 @@ import { PEARL_MANAI_SYSTEM_DATABASES } from "../../common/pearlmanaiParsedRepor
 export const PearlmanaiGuideCollectionSchema = z.object({
     name: z.string(),
     documentCount: z.number(),
-    // Oldest/newest reporting period as ISO start-of-month instants. Uses top-level
-    // `reportMonth` (or legacy `reportDataMonth`) in `YYYY-MM` when set; otherwise
-    // heuristics on segment text: "Report Period: MM/YY", then first M/D/YYYY match.
+    // Oldest/newest month from `reportMonth` / `reportDataMonth` only (YYYY-MM → ISO).
+    // Documents without a valid month field are excluded from the Timespan min/max; see periodsFound.
     oldestPeriod: z.string().nullable(),
     newestPeriod: z.string().nullable(),
     periodsFound: z.number(),
@@ -39,7 +38,7 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
     static operationType: OperationType = "metadata";
 
     public description =
-        "Pearlman AI: explains how this MongoDB stores parsed PDF reports, and lists all current non-system databases (properties) with their collections (reports) and reporting time ranges (from `reportMonth` when present, else from text in `content.segments`). Requires an active MongoDB connection.";
+        "Pearlman AI: explains how this MongoDB stores parsed PDF reports, and lists all current non-system databases (properties) with their collections (reports) and per-collection TimeSpan from `reportMonth` / `reportDataMonth` only. Requires an active MongoDB connection.";
 
     public argsShape = {};
     public override outputSchema = PearlmanaiGuideOutputSchema;
@@ -104,11 +103,8 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
     }
 
     /**
-     * Per-document reporting period, in preference order:
-     *   1. Top-level `reportMonth` or `reportDataMonth` (string `YYYY-MM`) → first day
-     *      of that month in UTC.
-     *   2. Else: "Report Period: MM/YY" in concatenated `content.segments[*].text` (day 1).
-     *   3. Else: first "M/D/YYYY" in that text.
+     * Timespan (oldest/newest) uses only `reportMonth`, else legacy `reportDataMonth`
+     * when both are strings matching `YYYY-MM`. No text/segment heuristics.
      */
     private async fetchCollectionStats(
         provider: Awaited<ReturnType<typeof this.ensureConnected>>,
@@ -121,30 +117,6 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
             const pipeline = [
                 {
                     $addFields: {
-                        _allText: {
-                            $reduce: {
-                                input: { $ifNull: ["$content.segments", []] },
-                                initialValue: "",
-                                in: { $concat: ["$$value", " ", { $ifNull: ["$$this.text", ""] }] },
-                            },
-                        },
-                    },
-                },
-                {
-                    $addFields: {
-                        _periodMatch: {
-                            $regexFind: {
-                                input: "$_allText",
-                                regex: /Report Period:\s*([0-9]{1,2})\/([0-9]{2,4})/,
-                                options: "i",
-                            },
-                        },
-                        _dateMatch: {
-                            $regexFind: {
-                                input: "$_allText",
-                                regex: /([0-9]{1,2})\/([0-9]{1,2})\/([0-9]{4})/,
-                            },
-                        },
                         _reportFromStored: {
                             $cond: [
                                 {
@@ -191,48 +163,7 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
                 },
                 {
                     $addFields: {
-                        _reportDate: {
-                            $cond: [
-                                { $ne: ["$_reportFromStored", null] },
-                                "$_reportFromStored",
-                                {
-                                    $cond: [
-                                        { $ne: ["$_periodMatch", null] },
-                                        {
-                                            $dateFromParts: {
-                                                year: {
-                                                    $let: {
-                                                        vars: { y: { $arrayElemAt: ["$_periodMatch.captures", 1] } },
-                                                        in: {
-                                                            $cond: [
-                                                                { $lte: [{ $strLenCP: "$$y" }, 2] },
-                                                                { $toInt: { $concat: ["20", "$$y"] } },
-                                                                { $toInt: "$$y" },
-                                                            ],
-                                                        },
-                                                    },
-                                                },
-                                                month: { $toInt: { $arrayElemAt: ["$_periodMatch.captures", 0] } },
-                                                day: 1,
-                                            },
-                                        },
-                                        {
-                                            $cond: [
-                                                { $ne: ["$_dateMatch", null] },
-                                                {
-                                                    $dateFromParts: {
-                                                        year: { $toInt: { $arrayElemAt: ["$_dateMatch.captures", 2] } },
-                                                        month: { $toInt: { $arrayElemAt: ["$_dateMatch.captures", 0] } },
-                                                        day: { $toInt: { $arrayElemAt: ["$_dateMatch.captures", 1] } },
-                                                    },
-                                                },
-                                                null,
-                                            ],
-                                        },
-                                    ],
-                                },
-                            ],
-                        },
+                        _reportDate: "$_reportFromStored",
                     },
                 },
                 {
