@@ -265,18 +265,20 @@ function PropertyCard({
     dark: boolean;
 }): ReactElement {
     const s = getStyles({ dark });
-    const initials = property.dbName.slice(0, 2).toUpperCase();
+    const reports = property.reports ?? [];
+    const dbLabel = property.dbName || "(unknown)";
+    const initials = (dbLabel.length >= 2 ? dbLabel.slice(0, 2) : dbLabel.padEnd(2, "—")).toUpperCase();
 
     return (
         <div style={s.card}>
             <div style={s.cardHeader}>
                 <div style={s.dbIcon}>{initials}</div>
-                <span style={s.dbName}>{property.dbName}</span>
+                <span style={s.dbName}>{dbLabel}</span>
                 <span style={s.collectionCount}>
-                    {property.reports.length} {property.reports.length === 1 ? "report" : "reports"}
+                    {reports.length} {reports.length === 1 ? "report" : "reports"}
                 </span>
             </div>
-            {property.reports.length === 0 ? (
+            {reports.length === 0 ? (
                 <div style={s.emptyRow}>No reports</div>
             ) : (
                 <table style={s.table}>
@@ -295,8 +297,8 @@ function PropertyCard({
                         </tr>
                     </thead>
                     <tbody>
-                        {property.reports.map((report) => (
-                            <ReportRow key={report.name} report={report} s={s} />
+                        {reports.map((report, idx) => (
+                            <ReportRow key={report?.name ?? `report-${idx}`} report={report} s={s} />
                         ))}
                     </tbody>
                 </table>
@@ -312,24 +314,27 @@ function ReportRow({
     report: PearlmanaiGuideOutput["properties"][number]["reports"][number];
     s: ReturnType<typeof getStyles>;
 }): ReactElement {
-    const displayName = formatReportName(report.name);
+    const name = typeof report?.name === "string" ? report.name : "";
+    const displayName = formatReportName(name);
+    const docCount = typeof report?.documentCount === "number" ? report.documentCount : 0;
+    const withRm = typeof report?.withReportMonth === "number" ? report.withReportMonth : 0;
     return (
         <tr>
             <td style={s.td}>
-                <span style={s.collectionName} title={report.name}>
-                    {displayName}
+                <span style={s.collectionName} title={name}>
+                    {displayName || "—"}
                 </span>
             </td>
             <td style={{ ...s.td, textAlign: "center" }}>
-                <span style={s.countBadge}>{report.documentCount}</span>
+                <span style={s.countBadge}>{docCount}</span>
             </td>
             <td style={s.td}>
                 <span style={s.timespanText}>
                     {formatMonthRange(
-                        report.oldestPeriod,
-                        report.newestPeriod,
-                        report.withReportMonth,
-                        report.documentCount
+                        report?.oldestPeriod ?? null,
+                        report?.newestPeriod ?? null,
+                        withRm,
+                        docCount
                     )}
                 </span>
             </td>
@@ -341,6 +346,17 @@ interface McpAppsRenderData {
     toolOutput?: {
         structuredContent?: PearlmanaiGuideOutput;
     };
+}
+
+/** Hosts may strip or reshape tool JSON; never assume `reports` is present. */
+function normalizeGuideProperties(
+    raw: PearlmanaiGuideOutput["properties"] | undefined
+): PearlmanaiGuideOutput["properties"] {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((p) => ({
+        dbName: typeof p?.dbName === "string" ? p.dbName : String(p?.dbName ?? ""),
+        reports: Array.isArray(p?.reports) ? p.reports : [],
+    }));
 }
 
 export const PearlmanaiParsedReportsGuide = (): ReactElement | null => {
@@ -363,7 +379,7 @@ export const PearlmanaiParsedReportsGuide = (): ReactElement | null => {
     // `data.toolOutput.structuredContent`. Legacy MCP-UI hosts surface the
     // structured payload at the root of renderData, so fall back to that.
     const structured = data?.toolOutput?.structuredContent ?? (data as PearlmanaiGuideOutput | undefined);
-    const properties = structured?.properties ?? [];
+    const properties = normalizeGuideProperties(structured?.properties);
     const generatedAt = structured?.generatedAt ?? null;
     // Label always from the bundled build (pearlmanaiGuideUiVersion.ts) — not env, not tool JSON.
     const guideVersion = PEARLMANAI_GUIDE_UI_VERSION;
