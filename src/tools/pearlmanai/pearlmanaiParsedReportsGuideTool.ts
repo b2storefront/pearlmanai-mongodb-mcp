@@ -5,6 +5,7 @@ import { MongoDBToolBase } from "../mongodb/mongodbTool.js";
 import type { OperationType, ToolCategory } from "../tool.js";
 import { PEARL_MANAI_GUIDE_HIDDEN_DATABASES } from "../../common/pearlmanaiConversationLog.js";
 import { PEARL_MANAI_SYSTEM_DATABASES } from "../../common/pearlmanaiParsedReportsGuide.js";
+import { PEARLMANAI_GUIDE_UI_VERSION } from "../../common/pearlmanaiGuideUiVersion.js";
 
 export const PearlmanaiGuideReportSchema = z.object({
     /** MongoDB collection name (one report per property). */
@@ -27,6 +28,8 @@ export const PearlmanaiGuidePropertySchema = z.object({
 export const PearlmanaiGuideOutputSchema = {
     properties: z.array(PearlmanaiGuidePropertySchema),
     generatedAt: z.string(),
+    /** Inventory/guide widget version (bump in pearlmanaiGuideUiVersion.ts when UI or shape changes). */
+    guideUiVersion: z.string(),
 };
 
 export type PearlmanaiGuideOutput = z.infer<z.ZodObject<typeof PearlmanaiGuideOutputSchema>>;
@@ -101,6 +104,7 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
             structuredContent: {
                 properties,
                 generatedAt: new Date().toISOString(),
+                guideUiVersion: PEARLMANAI_GUIDE_UI_VERSION,
             },
         };
     }

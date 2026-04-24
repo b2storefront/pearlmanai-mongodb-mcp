@@ -1,6 +1,7 @@
 import { type ReactElement } from "react";
 import { useRenderData } from "@lg-mcp/hooks";
 import type { PearlmanaiGuideOutput } from "../../../tools/pearlmanai/pearlmanaiParsedReportsGuideTool.js";
+import { PEARLMANAI_GUIDE_UI_VERSION } from "../../../common/pearlmanaiGuideUiVersion.js";
 
 function formatDate(iso: string | null): string {
     if (!iso) return "—";
@@ -128,6 +129,19 @@ function getStyles({ dark }: StylesOptions) {
             fontSize: "12px",
             color: textMuted,
             margin: 0,
+        },
+        versionBadge: {
+            display: "inline-block",
+            marginLeft: "8px",
+            padding: "2px 8px",
+            borderRadius: "4px",
+            fontSize: "11px",
+            fontWeight: 600,
+            letterSpacing: "0.02em",
+            background: tagBg,
+            color: tagText,
+            border: `1px solid ${border}`,
+            verticalAlign: "middle" as const,
         },
         grid: {
             display: "grid",
@@ -351,11 +365,18 @@ export const PearlmanaiParsedReportsGuide = (): ReactElement | null => {
     const structured = data?.toolOutput?.structuredContent ?? (data as PearlmanaiGuideOutput | undefined);
     const properties = structured?.properties ?? [];
     const generatedAt = structured?.generatedAt ?? null;
+    // Label always from the bundled build (pearlmanaiGuideUiVersion.ts) — not env, not tool JSON.
+    const guideVersion = PEARLMANAI_GUIDE_UI_VERSION;
 
     return (
         <div style={s.root}>
             <div style={s.header}>
-                <h2 style={s.title}>Pearlman AI — Properties &amp; reports</h2>
+                <h2 style={s.title}>
+                    Pearlman AI — Properties &amp; reports
+                    <span style={s.versionBadge} title="Guide inventory UI + schema version (bump in pearlmanaiGuideUiVersion.ts)">
+                        Guide v{guideVersion}
+                    </span>
+                </h2>
                 <p style={s.subtitle}>
                     {generatedAt
                         ? `Snapshot from ${formatDate(generatedAt)} · `
