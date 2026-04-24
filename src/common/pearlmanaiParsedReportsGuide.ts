@@ -25,6 +25,7 @@ Every document in every report collection follows this shape:
   "_id": "...",
   "classification": "...",
   "sourceFile": "...",
+  "reportMonth": "2025-06",
   "collectionName": "...",
   "importedAt": "...",
   "pages": [...],
@@ -38,7 +39,7 @@ Every document in every report collection follows this shape:
 }
 \`\`\`
 
-**The only field that contains meaningful report data is \`content.segments\`.** All other top-level fields (\`_id\`, \`classification\`, \`sourceFile\`, \`collectionName\`, \`importedAt\`, \`pages\`) are import metadata and should be ignored when answering questions about the actual report content.
+**Report body data** is in \`content.segments\` only. For **which calendar month** the report applies to, use the top-level \`reportMonth\` field (string \`YYYY-MM\`) when it is set — the \`pearlmanai-parsed-reports-guide\` tool and inventory UIs use \`reportMonth\` (or legacy \`reportDataMonth\` in the same format) to compute per-collection time ranges, and only fall back to dates parsed from segment text if those fields are missing. Other import metadata fields (\`classification\`, \`sourceFile\`, \`collectionName\`, \`importedAt\`, \`pages\`) are not the analytical table/figure data.
 
 Each segment has a \`kind\` field:
 - \`"text"\` — a block of narrative text from the PDF (e.g. header, footer, property name, report title). Often contains the property address, report period, and report type.

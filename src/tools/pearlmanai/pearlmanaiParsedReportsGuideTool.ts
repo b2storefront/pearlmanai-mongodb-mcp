@@ -9,9 +9,9 @@ import { PEARL_MANAI_SYSTEM_DATABASES } from "../../common/pearlmanaiParsedRepor
 export const PearlmanaiGuideCollectionSchema = z.object({
     name: z.string(),
     documentCount: z.number(),
-    // Oldest/newest reporting period extracted from the document text (ISO strings, null if
-    // no period could be determined). Prefers "Report Period: MM/YY" markers, falls back to
-    // the first M/D/YYYY date found in the document's text content.
+    // Oldest/newest reporting period as ISO start-of-month instants. Uses top-level
+    // `reportMonth` (or legacy `reportDataMonth`) in `YYYY-MM` when set; otherwise
+    // heuristics on segment text: "Report Period: MM/YY", then first M/D/YYYY match.
     oldestPeriod: z.string().nullable(),
     newestPeriod: z.string().nullable(),
     periodsFound: z.number(),
@@ -39,7 +39,7 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
     static operationType: OperationType = "metadata";
 
     public description =
-        "Pearlman AI: explains how this MongoDB stores parsed PDF reports, and lists all current non-system databases (properties) with their collections (reports) and import time spans. Requires an active MongoDB connection.";
+        "Pearlman AI: explains how this MongoDB stores parsed PDF reports, and lists all current non-system databases (properties) with their collections (reports) and reporting time ranges (from `reportMonth` when present, else from text in `content.segments`). Requires an active MongoDB connection.";
 
     public argsShape = {};
     public override outputSchema = PearlmanaiGuideOutputSchema;
@@ -104,16 +104,11 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
     }
 
     /**
-     * Extract per-document reporting periods from free-text content.
-     *
-     * Pearlman's parsed reports do not store a structured period field — the reporting
-     * period lives inside `content.segments[*].text`. We concatenate segment text and run
-     * two regexes in preference order:
-     *   1. "Report Period: MM/YY"   → canonical month the report covers (day set to 1).
-     *   2. First "M/D/YYYY" date    → report-generation or period-end date (fallback).
-     *
-     * Collections where no match is found (e.g. `management_fee_calculation`) return
-     * null period bounds and `periodsFound: 0`.
+     * Per-document reporting period, in preference order:
+     *   1. Top-level `reportMonth` or `reportDataMonth` (string `YYYY-MM`) → first day
+     *      of that month in UTC.
+     *   2. Else: "Report Period: MM/YY" in concatenated `content.segments[*].text` (day 1).
+     *   3. Else: first "M/D/YYYY" in that text.
      */
     private async fetchCollectionStats(
         provider: Awaited<ReturnType<typeof this.ensureConnected>>,
@@ -122,6 +117,7 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
         signal: AbortSignal
     ): Promise<{ count: number; oldest: string | null; newest: string | null; periodsFound: number }> {
         try {
+            const yyyymmRegex = "^(\\d{4})-(\\d{2})$";
             const pipeline = [
                 {
                     $addFields: {
@@ -149,42 +145,90 @@ export class PearlmanaiParsedReportsGuideTool extends MongoDBToolBase {
                                 regex: /([0-9]{1,2})\/([0-9]{1,2})\/([0-9]{4})/,
                             },
                         },
+                        _reportFromStored: {
+                            $cond: [
+                                {
+                                    $regexMatch: {
+                                        input: { $toString: { $ifNull: ["$reportMonth", ""] } },
+                                        regex: yyyymmRegex,
+                                    },
+                                },
+                                {
+                                    $dateFromString: {
+                                        dateString: {
+                                            $concat: [{ $toString: { $ifNull: ["$reportMonth", ""] } }, "-01"],
+                                        },
+                                        onError: null,
+                                        onNull: null,
+                                    },
+                                },
+                                {
+                                    $cond: [
+                                        {
+                                            $regexMatch: {
+                                                input: { $toString: { $ifNull: ["$reportDataMonth", ""] } },
+                                                regex: yyyymmRegex,
+                                            },
+                                        },
+                                        {
+                                            $dateFromString: {
+                                                dateString: {
+                                                    $concat: [
+                                                        { $toString: { $ifNull: ["$reportDataMonth", ""] } },
+                                                        "-01",
+                                                    ],
+                                                },
+                                                onError: null,
+                                                onNull: null,
+                                            },
+                                        },
+                                        null,
+                                    ],
+                                },
+                            ],
+                        },
                     },
                 },
                 {
                     $addFields: {
                         _reportDate: {
                             $cond: [
-                                { $ne: ["$_periodMatch", null] },
-                                {
-                                    $dateFromParts: {
-                                        year: {
-                                            $let: {
-                                                vars: { y: { $arrayElemAt: ["$_periodMatch.captures", 1] } },
-                                                in: {
-                                                    $cond: [
-                                                        { $lte: [{ $strLenCP: "$$y" }, 2] },
-                                                        { $toInt: { $concat: ["20", "$$y"] } },
-                                                        { $toInt: "$$y" },
-                                                    ],
-                                                },
-                                            },
-                                        },
-                                        month: { $toInt: { $arrayElemAt: ["$_periodMatch.captures", 0] } },
-                                        day: 1,
-                                    },
-                                },
+                                { $ne: ["$_reportFromStored", null] },
+                                "$_reportFromStored",
                                 {
                                     $cond: [
-                                        { $ne: ["$_dateMatch", null] },
+                                        { $ne: ["$_periodMatch", null] },
                                         {
                                             $dateFromParts: {
-                                                year: { $toInt: { $arrayElemAt: ["$_dateMatch.captures", 2] } },
-                                                month: { $toInt: { $arrayElemAt: ["$_dateMatch.captures", 0] } },
-                                                day: { $toInt: { $arrayElemAt: ["$_dateMatch.captures", 1] } },
+                                                year: {
+                                                    $let: {
+                                                        vars: { y: { $arrayElemAt: ["$_periodMatch.captures", 1] } },
+                                                        in: {
+                                                            $cond: [
+                                                                { $lte: [{ $strLenCP: "$$y" }, 2] },
+                                                                { $toInt: { $concat: ["20", "$$y"] } },
+                                                                { $toInt: "$$y" },
+                                                            ],
+                                                        },
+                                                    },
+                                                },
+                                                month: { $toInt: { $arrayElemAt: ["$_periodMatch.captures", 0] } },
+                                                day: 1,
                                             },
                                         },
-                                        null,
+                                        {
+                                            $cond: [
+                                                { $ne: ["$_dateMatch", null] },
+                                                {
+                                                    $dateFromParts: {
+                                                        year: { $toInt: { $arrayElemAt: ["$_dateMatch.captures", 2] } },
+                                                        month: { $toInt: { $arrayElemAt: ["$_dateMatch.captures", 0] } },
+                                                        day: { $toInt: { $arrayElemAt: ["$_dateMatch.captures", 1] } },
+                                                    },
+                                                },
+                                                null,
+                                            ],
+                                        },
                                     ],
                                 },
                             ],

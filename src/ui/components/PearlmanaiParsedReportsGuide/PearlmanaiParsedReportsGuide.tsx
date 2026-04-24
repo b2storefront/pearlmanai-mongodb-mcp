@@ -27,6 +27,55 @@ function formatMonth(iso: string | null): string {
     }
 }
 
+// Acronyms and short forms that should keep their casing when present as a whole
+// token in a collection name. Matched case-insensitively against each token.
+const PRESERVED_ACRONYMS = new Set([
+    "noi",
+    "ytd",
+    "qtd",
+    "mtd",
+    "cam",
+    "gl",
+    "ap",
+    "ar",
+    "pl",
+    "pnl",
+    "ebitda",
+    "roi",
+    "irr",
+    "capex",
+    "opex",
+    "kpi",
+    "t12",
+    "t3",
+    "t6",
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+    "ytm",
+    "us",
+    "usa",
+]);
+
+function formatReportName(raw: string): string {
+    if (!raw) return raw;
+    // Split on underscores, dashes, dots, and camelCase boundaries.
+    const tokens = raw
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        .split(/[\s_\-.]+/)
+        .filter(Boolean);
+    if (tokens.length === 0) return raw;
+    return tokens
+        .map((tok) => {
+            const lower = tok.toLowerCase();
+            if (PRESERVED_ACRONYMS.has(lower)) return lower.toUpperCase();
+            if (/^\d+$/.test(tok)) return tok;
+            return lower.charAt(0).toUpperCase() + lower.slice(1);
+        })
+        .join(" ");
+}
+
 function formatPeriodRange(
     oldest: string | null,
     newest: string | null,
@@ -243,10 +292,13 @@ function CollectionRow({
     col: PearlmanaiGuideOutput["properties"][number]["collections"][number];
     s: ReturnType<typeof getStyles>;
 }): ReactElement {
+    const displayName = formatReportName(col.name);
     return (
         <tr>
             <td style={s.td}>
-                <span style={s.collectionName}>{col.name}</span>
+                <span style={s.collectionName} title={col.name}>
+                    {displayName}
+                </span>
             </td>
             <td style={{ ...s.td, textAlign: "center" }}>
                 <span style={s.countBadge}>{col.documentCount}</span>
