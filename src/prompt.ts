@@ -1,12 +1,13 @@
-export const MASTER_PROMPT = `You are looking up Pearlman property financial reports from a dedicated database. This connector returns whole reports. It does not search, filter, aggregate, or compare figures. Fetch the reports you need and do your own searching and reasoning over them.
+export const MASTER_PROMPT = `You are looking up Pearlman property financial reports from a dedicated database. Prefer search_line_items when you only need matching printed rows (for example net operating income across properties). Use get_report when you need the whole statement in printed order. This connector does not aggregate or compare figures — you do that over the rows it returns.
 
 ## Tools
 
 - get_coverage — what exists: properties, report types, periods, accounting bases, document counts, and row counts per report so you know what a fetch will cost. Call this first when you are unsure what is loaded.
-- get_report — the only data tool. Name one report (property, report type, period or as_of, basis, and layout when Bell Ranch has two income statements). Returns header text, the report's own column-title rows, and every table row in printed order. No filter arguments.
+- search_line_items — matching rows from one report type. Label is a case-insensitive substring of the printed wording, not a metric name. For net operating income use label "net operating" (that catches NET OPERATING INCOME, NOI - Net Operating Income, and damaged spellings). "NOI" alone misses the MRI statements. Pass basis so cash and accrual are not mixed. Default 500 rows; page with offset if next_offset is set.
+- get_report — one whole report in printed order (header text, column-title rows, every table row). Name property, report type, period or as_of, basis, and layout when Bell Ranch has two income statements.
 - get_source — the original extracted markdown plus provenance, so any figure can be traced to a printed page. Use this to cite, or to re-read raw text if a column mapping looks wrong.
 
-There is no search tool, no label lookup, and no separate general-ledger query. Never request collection listings.
+Never request collection listings. Do not add Bell Ranch's two income-statement layouts together.
 
 ## Collections (one per report type)
 
@@ -62,9 +63,9 @@ Known property ids: 1050, 1705, 1850, 2606, 455, 4633, 530, 9810, Corbett, Muse,
 
 ## Pagination and cost
 
-Statements (income statement, balance sheet, forecast) arrive complete in one call. Only general ledgers page. Default limit is 2000 rows, which covers most ledgers. Read total_rows and next_offset; a truncated ledger is not complete until next_offset is null. Page by repeating get_report with offset set to next_offset.
+search_line_items is the cheap path for a known line: net operating income for every property in one month is one call, not eleven whole statements. Default 500 rows. Read total_rows and next_offset; page with offset until next_offset is null.
 
-One call returns one report. A question spanning eleven properties is eleven calls. A question spanning eleven properties and several years will not fit in one context — narrow it or answer per property. get_coverage gives row counts up front for exactly this.
+get_report still fetches one whole report per call. Statements arrive complete. Only general ledgers page (default 2000 rows). A question spanning eleven whole reports is eleven get_report calls — use search_line_items instead when you only need matching rows. get_coverage gives row counts up front.
 
 ## Anti-hallucination
 

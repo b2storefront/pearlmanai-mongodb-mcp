@@ -1,6 +1,6 @@
 # PearlmanAI Reports MCP
 
-FastMCP server that returns **whole property financial reports** from the isolated `pearlman_financials` database (the scraped monthly archive). It does not search, filter, or analyse rows — the model fetches a report and reads it.
+FastMCP server for property financial reports from the isolated `pearlman_financials` database (the scraped monthly archive). It returns printed rows as stored. Use **search_line_items** for a matching line (for example net operating income); use **get_report** for a whole statement.
 
 This replaces the generic MongoDB MCP at `https://mcp.pearlmanai-saas.b2s.app/mcp`.
 
@@ -9,6 +9,7 @@ This replaces the generic MongoDB MCP at `https://mcp.pearlmanai-saas.b2s.app/mc
 | Tool | Purpose |
 |------|---------|
 | `get_coverage` | Properties, report types, periods, bases, document and row counts |
+| `search_line_items` | Matching printed rows from one report type (label substring or account code) |
 | `get_report` | One whole report in printed order (ledgers page at 2000 rows) |
 | `get_source` | Original extracted markdown plus provenance |
 

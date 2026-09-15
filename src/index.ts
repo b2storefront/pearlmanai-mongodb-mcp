@@ -11,6 +11,7 @@ import { loadConfig } from "./config.js";
 import { connectDb } from "./db.js";
 import { MASTER_PROMPT } from "./prompt.js";
 import { registerTools } from "./tools/register.js";
+import { ensureSearchIndexes } from "./tools/search.js";
 
 const config = loadConfig();
 validateAuthConfig(config);
@@ -29,7 +30,8 @@ const server = new FastMCP({
 
 registerTools(server, toolAccess);
 
-await connectDb(config);
+const db = await connectDb(config);
+await ensureSearchIndexes(db);
 
 if (config.transport === "http") {
   if (config.auth.mode === "none") {

@@ -6,6 +6,7 @@ import { REPORT_TYPES } from "../catalog.js";
 import { getDb } from "../db.js";
 import { getCoverage } from "./coverage.js";
 import { getReport, getSource, ReportLookupError } from "./report.js";
+import { searchLineItems } from "./search.js";
 
 function jsonResult(value: unknown): string {
   return JSON.stringify(value, null, 2);
@@ -36,7 +37,7 @@ export function registerTools(
     ...access,
     name: "get_report",
     description:
-      "Return one whole financial report in printed order: header text, column-title rows, and every table row with named measures plus verbatim cells. One report per call. Statements arrive complete; general ledgers page (default 2000 rows). For Bell Ranch income statements you must pass layout (mri or essex) — the two statements agree and must not be added together. There is no row search; read the returned report yourself.",
+      "Return one whole financial report in printed order: header text, column-title rows, and every table row with named measures plus verbatim cells. One report per call. Statements arrive complete; general ledgers page (default 2000 rows). For Bell Ranch income statements you must pass layout (mri or essex) — the two statements agree and must not be added together. Prefer search_line_items when you only need matching rows (for example net operating income).",
     parameters: z.object({
       property_id: z
         .string()
@@ -69,6 +70,53 @@ export function registerTools(
       try {
         return jsonResult(
           await getReport(getDb(), {
+            ...args,
+            report: args.report as (typeof REPORT_TYPES)[number],
+          }),
+        );
+      } catch (error) {
+        if (error instanceof ReportLookupError) {
+          return jsonResult({ error: error.message });
+        }
+        throw error;
+      }
+    },
+  });
+
+  server.addTool({
+    ...access,
+    name: "search_line_items",
+    description:
+      "Return matching printed rows from one report type, without fetching the whole statement. Label is a case-insensitive substring (not a metric name). For net operating income search label \"net operating\" — that catches NET OPERATING INCOME, NOI - Net Operating Income, and the damaged spellings. Searching \"NOI\" alone misses MRI statements. Pass basis so cash and accrual are not mixed. Bell Ranch has two income-statement layouts that agree; pass layout or do not add both. Default 500 rows, then page with offset.",
+    parameters: z.object({
+      report: reportType.describe(
+        "income_statement | standard_balance_sheet | forecast_budget_report | general_ledger",
+      ),
+      label: z
+        .string()
+        .optional()
+        .describe("Case-insensitive substring of the printed label. Required unless account_code is set."),
+      account_code: z
+        .string()
+        .optional()
+        .describe("Exact account code as stored (for example 5755-0000)."),
+      property_id: z
+        .string()
+        .optional()
+        .describe("Restrict to one property. Omit to search all properties."),
+      period: z.string().optional().describe("YYYY-MM. Forecasts also accept this as the report-run month."),
+      as_of: z.string().optional().describe("Forecast report-run YYYY-MM. Alias of period for forecasts."),
+      basis: basis.optional().describe("accrual or cash. Pass this for money questions; never mix bases."),
+      layout: layout
+        .optional()
+        .describe("mri | appfolio | essex. Use when Bell Ranch would otherwise return both income statements."),
+      offset: z.number().int().min(0).optional(),
+      limit: z.number().int().min(1).max(2000).optional().describe("Default 500."),
+    }),
+    execute: async (args) => {
+      try {
+        return jsonResult(
+          await searchLineItems(getDb(), {
             ...args,
             report: args.report as (typeof REPORT_TYPES)[number],
           }),
