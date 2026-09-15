@@ -1,23 +1,5 @@
-dist
-node_modules
-
-.vscode/mcp.json
-.github/prompts/*
-
-# Environment variables
+node_modules/
+dist/
 .env
-
-# Sensitive
-state.json
-
-tests/tmp
-coverage
-# Generated assets by accuracy runs
-.accuracy
-
-temp
-.DS_Store
-
-# Development tool files
-.yalc
-yalc.lock
+*.log
+.oauth-tokens/

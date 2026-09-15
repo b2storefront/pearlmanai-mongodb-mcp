@@ -1,0 +1,35 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - fast-reports
+      - main
+
+jobs:
+  deploy:
+    name: Deploy & Restart MCP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+          echo "Key fingerprint:"
+          ssh-keygen -lf ~/.ssh/deploy_key
+
+      - name: Deploy via SSH
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'set -e
+            export PATH=/root/.nvm/versions/node/v24.4.1/bin:$PATH
+            cd /opt/pearlmanai-mongodb-mcp-industrial
+            git fetch origin
+            git checkout fast-reports
+            git pull --ff-only origin fast-reports
+            npm install
+            npm run build
+            systemctl restart mongodb-mcp-industrial
+            echo "Deploy complete"'
