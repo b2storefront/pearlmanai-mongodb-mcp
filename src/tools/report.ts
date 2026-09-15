@@ -1,13 +1,6 @@
-import type { Document } from "mongodb";
+import type { Db, Document } from "mongodb";
 
-import {
-  REPORT_COLLECTIONS,
-  REPORT_TYPES,
-  requireProperty,
-  type AccountingBasis,
-  type ReportType,
-} from "../catalog.js";
-import { propertyDb } from "../db.js";
+import { REPORT_TYPES, requireProperty, type ReportType } from "../catalog.js";
 
 const DEFAULT_LIMIT = 2000;
 const MAX_LIMIT = 5000;
@@ -24,7 +17,7 @@ export interface GetReportArgs {
   report: ReportType;
   period?: string;
   as_of?: string;
-  basis?: AccountingBasis;
+  basis: "accrual" | "cash";
   layout?: "mri" | "appfolio" | "essex";
   offset?: number;
   limit?: number;
@@ -34,78 +27,7 @@ function isReportType(value: string): value is ReportType {
   return (REPORT_TYPES as string[]).includes(value);
 }
 
-function cellString(value: unknown): string {
-  if (value == null) {
-    return "";
-  }
-  return String(value);
-}
-
-function flattenTables(doc: Document): {
-  header_text: string;
-  tables: { keys: string[]; rows: Record<string, string>[] }[];
-  rows: {
-    row_index: number;
-    table_index: number;
-    label: string;
-    cells: string[];
-    columns: Record<string, string>;
-  }[];
-} {
-  const segments = Array.isArray(doc.content?.segments) ? doc.content.segments : [];
-  const textParts: string[] = [];
-  const tables: { keys: string[]; rows: Record<string, string>[] }[] = [];
-  const rows: {
-    row_index: number;
-    table_index: number;
-    label: string;
-    cells: string[];
-    columns: Record<string, string>;
-  }[] = [];
-
-  for (const segment of segments) {
-    if (segment?.kind === "text" && typeof segment.text === "string" && segment.text.trim()) {
-      textParts.push(segment.text.trim());
-      continue;
-    }
-    if (segment?.kind !== "table" || !Array.isArray(segment.rows)) {
-      continue;
-    }
-    const tableIndex = tables.length;
-    const mapped = (segment.rows as Document[]).map((row) => {
-      const columns: Record<string, string> = {};
-      for (const [key, value] of Object.entries(row)) {
-        columns[key] = cellString(value);
-      }
-      return columns;
-    });
-    const keys = mapped[0] ? Object.keys(mapped[0]) : [];
-    tables.push({ keys, rows: mapped });
-    for (const columns of mapped) {
-      const cells = keys.map((key) => columns[key] ?? "");
-      rows.push({
-        row_index: rows.length,
-        table_index: tableIndex,
-        label: cells[0] ?? "",
-        cells,
-        columns,
-      });
-    }
-  }
-
-  return {
-    header_text: textParts.join("\n\n"),
-    tables: tables.map((table) => ({ keys: table.keys, rows: [] })),
-    rows,
-  };
-}
-
-function catalogBasis(property: ReturnType<typeof requireProperty>, period: string): AccountingBasis | undefined {
-  const year = period.slice(0, 4);
-  return property.basis_by_year[year];
-}
-
-export async function getReport(args: GetReportArgs) {
+export async function getReport(db: Db, args: GetReportArgs) {
   const property = requireProperty(args.property_id);
   if (!isReportType(args.report)) {
     throw new ReportLookupError(
@@ -113,91 +35,124 @@ export async function getReport(args: GetReportArgs) {
     );
   }
 
+  const asOf = args.as_of ?? args.period;
   const period = args.period ?? args.as_of;
-  if (!period) {
-    throw new ReportLookupError(`${args.report} requires period (YYYY-MM).`);
+  if (args.report === "forecast_budget_report") {
+    if (!asOf) {
+      throw new ReportLookupError("forecast_budget_report requires as_of (or period).");
+    }
+  } else if (!period) {
+    throw new ReportLookupError(`${args.report} requires period.`);
   }
 
-  const collectionName = REPORT_COLLECTIONS[args.report];
-  const document = await propertyDb(property.mongo_db).collection(collectionName).findOne({
-    reportMonth: period,
-  });
+  const filter: Document =
+    args.report === "forecast_budget_report"
+      ? { property_id: property._id, report: args.report, basis: args.basis, as_of: asOf }
+      : { property_id: property._id, report: args.report, basis: args.basis, period };
+
+  if (args.report === "income_statement") {
+    const matches = await db
+      .collection("documents")
+      .find(filter, { projection: { layout: 1, source_file: 1, row_count: 1 } })
+      .toArray();
+    const layouts = [...new Set(matches.map((doc) => doc.layout).filter(Boolean))];
+    if (!args.layout && layouts.length > 1) {
+      throw new ReportLookupError(
+        `${property._id} ${period} has ${layouts.length} income statements (${layouts.join(", ")}). Pass layout to pick one; do not add both.`,
+      );
+    }
+    if (args.layout) {
+      filter.layout = args.layout;
+    }
+  } else if (args.layout) {
+    filter.layout = args.layout;
+  }
+
+  const document = await db.collection("documents").findOne(filter);
   if (!document) {
     throw new ReportLookupError(
-      `No ${args.report} for ${property._id} ${period} in ${property.mongo_db}.${collectionName}`,
+      `No ${args.report} for ${property._id} ${period ?? asOf} ${args.basis}` +
+        (args.layout ? ` layout=${args.layout}` : ""),
     );
   }
 
-  const flattened = flattenTables(document);
   const offset = Math.max(0, args.offset ?? 0);
   const limit = Math.min(MAX_LIMIT, Math.max(1, args.limit ?? DEFAULT_LIMIT));
-  const page = flattened.rows.slice(offset, offset + limit);
-  const nextOffset = offset + page.length < flattened.rows.length ? offset + page.length : null;
-  const expectedBasis = catalogBasis(property, period);
+  const totalRows = await db.collection(args.report).countDocuments({
+    document_id: document._id,
+  });
+  const rows = await db
+    .collection(args.report)
+    .find({ document_id: document._id })
+    .sort({ document_id: 1, row_index: 1 })
+    .skip(offset)
+    .limit(limit)
+    .toArray();
+
+  const nextOffset = offset + rows.length < totalRows ? offset + rows.length : null;
 
   return {
     property_id: property._id,
     property_name: property.name,
     manager: property.manager,
-    mongo_db: property.mongo_db,
     report: args.report,
-    collection: collectionName,
-    period,
-    source_file: document.sourceFile,
-    classification: document.classification,
-    pages: document.pages,
-    catalog_basis: expectedBasis,
-    requested_basis: args.basis ?? null,
-    header_text: flattened.header_text,
-    table_count: flattened.tables.length,
-    column_keys: flattened.tables[0]?.keys ?? [],
-    total_rows: flattened.rows.length,
+    basis: document.basis,
+    period: document.period,
+    as_of: document.as_of,
+    layout: document.layout,
+    source_file: document.source_file,
+    header_text: document.header_text,
+    column_headers: document.column_headers,
+    total_rows: totalRows,
     offset,
     limit,
     next_offset: nextOffset,
-    rows: page,
+    rows,
   };
 }
 
-export async function getSource(args: {
-  property_id: string;
-  report: ReportType;
-  period?: string;
-  as_of?: string;
-  basis?: AccountingBasis;
-  layout?: string;
-}) {
+export async function getSource(
+  db: Db,
+  args: { property_id: string; report: ReportType; period?: string; as_of?: string; basis: "accrual" | "cash"; layout?: string },
+) {
   const property = requireProperty(args.property_id);
+  const asOf = args.as_of ?? args.period;
   const period = args.period ?? args.as_of;
-  if (!period) {
-    throw new ReportLookupError(`${args.report} requires period (YYYY-MM).`);
+  const filter: Document =
+    args.report === "forecast_budget_report"
+      ? { property_id: property._id, report: args.report, basis: args.basis, as_of: asOf }
+      : { property_id: property._id, report: args.report, basis: args.basis, period };
+  if (args.layout) {
+    filter.layout = args.layout;
   }
 
-  const collectionName = REPORT_COLLECTIONS[args.report];
-  const document = await propertyDb(property.mongo_db).collection(collectionName).findOne({
-    reportMonth: period,
-  });
+  const matches = await db.collection("documents").find(filter).toArray();
+  if (args.report === "income_statement" && !args.layout && matches.length > 1) {
+    throw new ReportLookupError(
+      `${property._id} ${period} has multiple income statements. Pass layout.`,
+    );
+  }
+  const document = matches[0];
   if (!document) {
     throw new ReportLookupError(
-      `No source for ${property._id} ${args.report} ${period} in ${property.mongo_db}.${collectionName}`,
+      `No source for ${property._id} ${args.report} ${period ?? asOf} ${args.basis}`,
     );
   }
 
-  const segments = Array.isArray(document.content?.segments) ? document.content.segments : [];
-  const markdown = segments
-    .filter((segment: Document) => segment?.kind === "text" && typeof segment.text === "string")
-    .map((segment: Document) => segment.text as string)
-    .join("\n\n");
-
   return {
     property_id: property._id,
-    report: args.report,
-    collection: collectionName,
-    period: document.reportMonth,
-    source_file: document.sourceFile,
-    classification: document.classification,
-    pages: document.pages,
-    imported_at: document.importedAt,
-    markdown,
+    report: document.report,
+    basis: document.basis,
+    period: document.period,
+    as_of: document.as_of,
+    layout: document.layout,
+    source_file: document.source_file,
+    source_pdf: document.source_pdf,
+    page_count: document.page_count,
+    column_headers: document.column_headers,
+    landingai: document.landingai,
+    content_hash: document.content_hash,
+    ingested_at: document.ingested_at,
+    markdown: document.markdown,
   };
 }

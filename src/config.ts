@@ -26,6 +26,7 @@ const authConfigSchema = z.object({
 
 const configSchema = z.object({
   mongoUri: z.string().min(1),
+  mongoDb: z.string().min(1).default("pearlman_financials"),
   transport: z.enum(["stdio", "http"]).default("stdio"),
   httpPort: z.coerce.number().int().min(1).max(65535).default(8092),
   httpHost: z.string().min(1).default("127.0.0.1"),
@@ -56,6 +57,7 @@ function parseAllowedEmails(value: string | undefined): string[] | undefined {
 export function loadConfig(): AppConfig {
   const parsed = configSchema.safeParse({
     mongoUri: readEnv("MONGODB_URI") ?? readEnv("MDB_MCP_CONNECTION_STRING"),
+    mongoDb: readEnv("MONGODB_DB", "pearlman_financials"),
     transport: readEnv("MCP_TRANSPORT", "stdio"),
     httpPort: readEnv("MCP_HTTP_PORT") ?? readEnv("MDB_MCP_HTTP_PORT", "8092"),
     httpHost: readEnv("MCP_HTTP_HOST") ?? readEnv("MDB_MCP_HTTP_HOST", "127.0.0.1"),

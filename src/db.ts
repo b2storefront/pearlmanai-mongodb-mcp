@@ -3,31 +3,30 @@ import { MongoClient, type Db } from "mongodb";
 import type { AppConfig } from "./config.js";
 
 let client: MongoClient | undefined;
+let db: Db | undefined;
 
-export async function connectDb(config: AppConfig): Promise<MongoClient> {
-  if (client) {
-    return client;
+export async function connectDb(config: AppConfig): Promise<Db> {
+  if (db) {
+    return db;
   }
 
   client = new MongoClient(config.mongoUri, {
     serverSelectionTimeoutMS: 20_000,
   });
   await client.connect();
-  return client;
+  db = client.db(config.mongoDb);
+  return db;
 }
 
-export function getClient(): MongoClient {
-  if (!client) {
+export function getDb(): Db {
+  if (!db) {
     throw new Error("MongoDB is not connected");
   }
-  return client;
-}
-
-export function propertyDb(mongoDb: string): Db {
-  return getClient().db(mongoDb);
+  return db;
 }
 
 export async function closeDb(): Promise<void> {
   await client?.close();
   client = undefined;
+  db = undefined;
 }

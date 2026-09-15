@@ -1,6 +1,6 @@
 # PearlmanAI Reports MCP
 
-FastMCP server that returns **whole property financial reports** from the already-imported monthly PDF packages (one MongoDB database per property). It does not search, filter, or analyse rows — the model fetches a report and reads it.
+FastMCP server that returns **whole property financial reports** from the isolated `pearlman_financials` database (the scraped monthly archive). It does not search, filter, or analyse rows — the model fetches a report and reads it.
 
 This replaces the generic MongoDB MCP at `https://mcp.pearlmanai-saas.b2s.app/mcp`.
 
@@ -8,9 +8,9 @@ This replaces the generic MongoDB MCP at `https://mcp.pearlmanai-saas.b2s.app/mc
 
 | Tool | Purpose |
 |------|---------|
-| `get_coverage` | Properties, report types, months, document counts |
+| `get_coverage` | Properties, report types, periods, bases, document and row counts |
 | `get_report` | One whole report in printed order (ledgers page at 2000 rows) |
-| `get_source` | Original extracted page text plus provenance |
+| `get_source` | Original extracted markdown plus provenance |
 
 ## Setup
 
@@ -22,6 +22,7 @@ npm run build
 
 ```env
 MONGODB_URI=mongodb+srv://USER:PASSWORD@cluster/
+MONGODB_DB=pearlman_financials
 MCP_TRANSPORT=http
 MCP_HTTP_HOST=127.0.0.1
 MCP_HTTP_PORT=8008
@@ -32,4 +33,4 @@ Production nginx already authenticates clients. The process binds localhost only
 
 ## Coverage
 
-Orchard MRI properties and Bell Ranch: 2025-01 through 2026-07. Timbers: 2026 with holes. Corbett: June 2026 only, no income statement. Muse: none.
+Eleven properties, January–August 2026. **306** reports: **83** income statements, **75** balance sheets, **74** forecasts, **74** general ledgers. Muse and Corbett are included. Timbers and those two TMG properties have no June P&L. Bell Ranch has two income-statement layouts per month — pass `layout`. No cash flow.

@@ -55,7 +55,7 @@ if (config.transport === "http") {
         : "none";
 
   console.log(
-    `[pearlmanai-reports-mcp] HTTP MCP listening on http://${config.httpHost}:${config.httpPort}/mcp (auth: ${authSummary})`,
+    `[pearlmanai-reports-mcp] HTTP MCP listening on http://${config.httpHost}:${config.httpPort}/mcp (db: ${config.mongoDb}, auth: ${authSummary})`,
   );
 } else {
   server.start({
