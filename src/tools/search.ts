@@ -18,10 +18,54 @@ export interface SearchLineItemsArgs {
   property_id?: string;
   period?: string;
   as_of?: string;
+  year?: string | number;
   basis?: AccountingBasis;
   layout?: "mri" | "appfolio" | "essex";
   offset?: number;
   limit?: number;
+}
+
+const YEAR_RE = /^\d{4}$/;
+const MONTH_RE = /^\d{4}-\d{2}$/;
+
+function yearRange(year: string): { $gte: string; $lte: string } {
+  return { $gte: `${year}-01`, $lte: `${year}-12` };
+}
+
+function periodFieldFilter(
+  report: ReportType,
+  period?: string,
+  asOf?: string,
+  year?: string | number,
+): Document {
+  const yearText = year === undefined || year === null ? "" : String(year).trim();
+  const raw = report === "forecast_budget_report" ? (asOf ?? period) : (period ?? asOf);
+  const rawText = raw?.trim() ?? "";
+  const field = report === "forecast_budget_report" ? "as_of" : "period";
+
+  const month = MONTH_RE.test(rawText) ? rawText : undefined;
+  const fromPeriod = YEAR_RE.test(rawText) ? rawText : undefined;
+  const fromYear = YEAR_RE.test(yearText) ? yearText : undefined;
+  const yearValue = fromYear ?? fromPeriod;
+
+  if (yearText && !fromYear) {
+    throw new ReportLookupError(`year must be YYYY (for example 2026), not "${yearText}".`);
+  }
+  if (rawText && !month && !fromPeriod) {
+    throw new ReportLookupError(
+      `${field} must be YYYY-MM or YYYY (for example 2026-04 or 2026), not "${rawText}".`,
+    );
+  }
+  if (month && yearValue && !month.startsWith(`${yearValue}-`)) {
+    throw new ReportLookupError(`period ${month} is not in year ${yearValue}.`);
+  }
+  if (month) {
+    return { [field]: month };
+  }
+  if (yearValue) {
+    return { [field]: yearRange(yearValue) };
+  }
+  return {};
 }
 
 function isReportType(value: string): value is ReportType {
@@ -101,15 +145,7 @@ export async function searchLineItems(db: Db, args: SearchLineItemsArgs) {
     filter.layout = args.layout;
   }
 
-  const asOf = args.as_of ?? args.period;
-  const period = args.period ?? args.as_of;
-  if (args.report === "forecast_budget_report") {
-    if (asOf) {
-      filter.as_of = asOf;
-    }
-  } else if (period) {
-    filter.period = period;
-  }
+  Object.assign(filter, periodFieldFilter(args.report, args.period, args.as_of, args.year));
 
   if (label) {
     filter.label = { $regex: escapeRegex(label), $options: "i" };
