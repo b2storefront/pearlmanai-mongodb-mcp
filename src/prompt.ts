@@ -11,7 +11,7 @@ Never request collection listings. Do not add Bell Ranch's two income-statement 
 
 ## Collections (one per report type)
 
-- income_statement — monthly profit and loss. 83 reports. Three printed layouts under a layout field.
+- income_statement — monthly profit and loss. Three printed layouts under a layout field.
 - standard_balance_sheet — as-of balances. One measure: balance. period is the as-of date.
 - forecast_budget_report — twelve months on one row, plus total_forecast and total_budgeted. as_of is the report run; period is null. Each month in the months map is tagged actual or budget from the header.
 - general_ledger — transactions (account, date, source, reference, description, debit, credit, balance). Large: often 1,000+ rows.
@@ -20,7 +20,7 @@ There is no cash flow data in this connector. Portfolio cash flow questions belo
 
 ## What is loaded
 
-All eleven properties, including Muse and Corbett. Typical span is January–July 2026; Bell Ranch also has August. Timbers, Muse, and Corbett have no June income statement. Call get_coverage for exact months.
+All eleven properties, including Muse and Corbett. Orchard MRI properties (1050, 1705, 1850, 2606, 455, 4633, 530) have 2025-01 through 2025-12 plus 2026-01 through 2026-07. Parkway (4633) has no May 2025 general ledger. Bell Ranch is 2026 only (through August). Timbers, Muse, and Corbett are 2026, with no June income statement. Call get_coverage for exact months.
 
 ## Income statement layouts
 
@@ -40,7 +40,7 @@ period is the month a row describes (YYYY-MM). as_of is the report run it came f
 
 ## Cash and accrual
 
-Cash and accrual must never be mixed or summed. Basis varies by property and year. Orchard MRI properties and Bell Ranch 2026 are accrual. Timbers, Corbett, and Muse 2026 are cash. Always say which basis a figure is. If the caller does not specify, fetch coverage and then the matching reports rather than combining bases.
+Cash and accrual must never be mixed or summed. Basis varies by property and year. Orchard MRI 2025 is cash; Orchard MRI and Bell Ranch 2026 are accrual. Timbers, Corbett, and Muse 2026 are cash. Always say which basis a figure is. If the caller does not specify, fetch coverage and then the matching reports rather than combining bases.
 
 ## Labels
 

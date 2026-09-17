@@ -34,4 +34,4 @@ Production nginx already authenticates clients. The process binds localhost only
 
 ## Coverage
 
-Eleven properties, January–August 2026. **306** reports: **83** income statements, **75** balance sheets, **74** forecasts, **74** general ledgers. Muse and Corbett are included. Timbers and those two TMG properties have no June P&L. Bell Ranch has two income-statement layouts per month — pass `layout`. No cash flow.
+Eleven properties. Orchard MRI: 2025 (cash) plus 2026 through July (accrual). Bell Ranch, Timbers, Muse, and Corbett: 2026 only. **641** reports after the 2025 load. Parkway has no May 2025 general ledger. Muse and Corbett 2026 have no June P&L. Bell Ranch has two income-statement layouts per month — pass `layout`. No cash flow.
