@@ -10,6 +10,7 @@ This replaces the generic MongoDB MCP at `https://mcp.pearlmanai-saas.b2s.app/mc
 |------|---------|
 | `get_coverage` | Properties, report types, periods, bases, document and row counts |
 | `search_line_items` | Matching printed rows from one report type (label substring or account code). Pass `year` or `period=YYYY` for a calendar year in one call. |
+| `get_year_report` | Every monthly whole report for one property and one calendar year (ledgers page one month at a time) |
 | `get_report` | One whole report for one property and one month (ledgers page at 2000 rows) |
 | `get_source` | Original extracted markdown plus provenance |
 

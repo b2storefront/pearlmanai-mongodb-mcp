@@ -5,7 +5,7 @@ import type { ToolAccessGuard } from "../auth.js";
 import { REPORT_TYPES } from "../catalog.js";
 import { getDb } from "../db.js";
 import { getCoverage } from "./coverage.js";
-import { getReport, getSource, ReportLookupError } from "./report.js";
+import { getReport, getSource, getYearReport, ReportLookupError } from "./report.js";
 import { searchLineItems } from "./search.js";
 
 function jsonResult(value: unknown): string {
@@ -124,6 +124,56 @@ export function registerTools(
       try {
         return jsonResult(
           await getReport(getDb(), {
+            ...args,
+            report: args.report as (typeof REPORT_TYPES)[number],
+          }),
+        );
+      } catch (error) {
+        if (error instanceof ReportLookupError) {
+          return jsonResult({ error: error.message });
+        }
+        throw error;
+      }
+    },
+  });
+
+  server.addTool({
+    ...access,
+    name: "get_year_report",
+    description:
+      "Return every monthly statement of one report type for one property and one calendar year. One property, one year, one basis, one report type — the year-wide version of get_report. Each month comes back as a whole printed report (header, column titles, every row). Missing months are listed, not filled in. For a named line across properties, use search_line_items instead. Income statements, balance sheets, and forecasts return all months in one call (default 12). General ledgers are large: default one month of that year per call, then page with offset. Bell Ranch income statements need layout (mri or essex).",
+    parameters: z.object({
+      property_id: z
+        .string()
+        .describe("Property id or alias (1050, 548→530, 460→9810, The Muse→Muse, Timbers, Corbett)."),
+      report: reportType.describe(
+        "income_statement | standard_balance_sheet | forecast_budget_report | general_ledger",
+      ),
+      year: z
+        .union([z.string(), z.number()])
+        .describe("Calendar year YYYY (for example 2024)."),
+      basis: basis.describe("accrual or cash. Never mix."),
+      layout: layout
+        .optional()
+        .describe("Required when Bell Ranch has two income statements (mri vs essex)."),
+      offset: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe("Skip this many months that exist in the year (not calendar gaps)."),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(12)
+        .optional()
+        .describe("Months to return. Default 12 for statements; default 1 for general ledgers."),
+    }),
+    execute: async (args) => {
+      try {
+        return jsonResult(
+          await getYearReport(getDb(), {
             ...args,
             report: args.report as (typeof REPORT_TYPES)[number],
           }),
