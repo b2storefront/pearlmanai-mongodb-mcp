@@ -26,7 +26,7 @@ export const PROPERTIES: PropertyRecord[] = [
     aliases: ["1050"],
     mongo_db: "1050",
     layouts: { income_statement: "mri" },
-    basis_by_year: { "2025": "cash", "2026": "accrual" },
+    basis_by_year: { "2023": "cash", "2024": "cash", "2025": "cash", "2026": "accrual" },
   },
   {
     _id: "1705",
@@ -36,7 +36,7 @@ export const PROPERTIES: PropertyRecord[] = [
     aliases: ["1705"],
     mongo_db: "1705",
     layouts: { income_statement: "mri" },
-    basis_by_year: { "2025": "cash", "2026": "accrual" },
+    basis_by_year: { "2023": "cash", "2024": "cash", "2025": "cash", "2026": "accrual" },
   },
   {
     _id: "1850",
@@ -46,7 +46,7 @@ export const PROPERTIES: PropertyRecord[] = [
     aliases: ["1850"],
     mongo_db: "1850",
     layouts: { income_statement: "mri" },
-    basis_by_year: { "2025": "cash", "2026": "accrual" },
+    basis_by_year: { "2023": "cash", "2024": "cash", "2025": "cash", "2026": "accrual" },
   },
   {
     _id: "2606",
@@ -56,7 +56,7 @@ export const PROPERTIES: PropertyRecord[] = [
     aliases: ["2606"],
     mongo_db: "2606",
     layouts: { income_statement: "mri" },
-    basis_by_year: { "2025": "cash", "2026": "accrual" },
+    basis_by_year: { "2023": "cash", "2024": "cash", "2025": "cash", "2026": "accrual" },
   },
   {
     _id: "455",
@@ -66,7 +66,7 @@ export const PROPERTIES: PropertyRecord[] = [
     aliases: ["455"],
     mongo_db: "455",
     layouts: { income_statement: "mri" },
-    basis_by_year: { "2025": "cash", "2026": "accrual" },
+    basis_by_year: { "2023": "cash", "2024": "cash", "2025": "cash", "2026": "accrual" },
   },
   {
     _id: "4633",
@@ -76,7 +76,7 @@ export const PROPERTIES: PropertyRecord[] = [
     aliases: ["4633", "4655", "4677", "4699", "Parkway"],
     mongo_db: "4633",
     layouts: { income_statement: "mri" },
-    basis_by_year: { "2025": "cash", "2026": "accrual" },
+    basis_by_year: { "2023": "cash", "2024": "cash", "2025": "cash", "2026": "accrual" },
   },
   {
     _id: "530",
@@ -86,7 +86,7 @@ export const PROPERTIES: PropertyRecord[] = [
     aliases: ["530", "548"],
     mongo_db: "530",
     layouts: { income_statement: "mri" },
-    basis_by_year: { "2025": "cash", "2026": "accrual" },
+    basis_by_year: { "2023": "cash", "2024": "cash", "2025": "cash", "2026": "accrual" },
   },
   {
     _id: "9810",
@@ -96,7 +96,7 @@ export const PROPERTIES: PropertyRecord[] = [
     aliases: ["9810", "460", "Bell Ranch"],
     mongo_db: "9810",
     layouts: { income_statement: "mri" },
-    basis_by_year: { "2025": "cash", "2026": "accrual" },
+    basis_by_year: { "2023": "cash", "2024": "cash", "2025": "cash", "2026": "accrual" },
   },
   {
     _id: "Corbett",

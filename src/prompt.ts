@@ -35,7 +35,7 @@ There is no cash flow data in this connector. Portfolio cash flow questions belo
 
 ## What is loaded
 
-All eleven properties, including Muse and Corbett. Orchard MRI properties (1050, 1705, 1850, 2606, 455, 4633, 530) have 2025-01 through 2025-12 plus 2026-01 through 2026-07. Parkway (4633) has no May 2025 general ledger. Bell Ranch is 2026 only (through August). Timbers, Muse, and Corbett are 2026, with no June income statement. Call get_coverage for exact months.
+All eleven properties, including Muse and Corbett. Orchard MRI properties (1050, 1705, 1850, 2606, 455, 4633, 530) have 2023-01 through 2025-12 plus 2026-01 through 2026-07. Those 2023–2025 books are cash; 2026 Orchard remains accrual. 1050 has no June 2024 income statement. Parkway (4633) has no December 2024 general ledger and no May 2025 general ledger. Bell Ranch is 2026 only (through August). Timbers, Muse, and Corbett are 2026, with no June income statement. Call get_coverage for exact months.
 
 ## Income statement layouts
 
@@ -55,7 +55,7 @@ period is the month a row describes (YYYY-MM), or a calendar year (YYYY) on sear
 
 ## Cash and accrual
 
-Cash and accrual must never be mixed or summed. Basis varies by property and year. Orchard MRI 2025 is cash; Orchard MRI and Bell Ranch 2026 are accrual. Timbers, Corbett, and Muse 2026 are cash. Always say which basis a figure is. If the caller does not specify a basis, run search_line_items twice (accrual, then cash) and keep the two sets separate — do not fetch whole reports to split them.
+Cash and accrual must never be mixed or summed. Basis varies by property and year. Orchard MRI 2023, 2024, and 2025 are cash; Orchard MRI and Bell Ranch 2026 are accrual. Timbers, Corbett, and Muse 2026 are cash. Always say which basis a figure is. If the caller does not specify a basis, run search_line_items twice (accrual, then cash) and keep the two sets separate — do not fetch whole reports to split them.
 
 ## Labels
 

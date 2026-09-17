@@ -34,4 +34,4 @@ Production nginx already authenticates clients. The process binds localhost only
 
 ## Coverage
 
-Eleven properties. Orchard MRI: 2025 (cash) plus 2026 through July (accrual). Bell Ranch, Timbers, Muse, and Corbett: 2026 only. **641** reports after the 2025 load. Parkway has no May 2025 general ledger. Muse and Corbett 2026 have no June P&L. Bell Ranch has two income-statement layouts per month — pass `layout`. No cash flow.
+Eleven properties. Orchard MRI: 2023–2025 (cash) plus 2026 through July (accrual). Bell Ranch, Timbers, Muse, and Corbett: 2026 only. **1311** reports after the 2023–2024 load. 1050 has no June 2024 income statement. Parkway has no December 2024 general ledger and no May 2025 general ledger. Muse and Corbett 2026 have no June P&L. Bell Ranch has two income-statement layouts per month — pass `layout`. No cash flow.
