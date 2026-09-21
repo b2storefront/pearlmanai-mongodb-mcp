@@ -10,6 +10,8 @@
     "start": "node dist/index.js",
     "inspect": "npx fastmcp inspect src/index.ts",
     "ingest": "tsx src/ingest/cli.ts",
+    "reparse": "tsx src/ingest/reparse.ts",
+    "test": "tsx --test src/ingest/repair.test.ts",
     "ensure-schema": "tsx src/schema.ts",
     "validate": "tsx src/validate.ts"
   },

@@ -33,6 +33,27 @@ MCP_AUTH=none
 
 Production nginx already authenticates clients. The process binds localhost only.
 
+## Ingest and reparse
+
+These CLIs write Atlas (`pearlman_financials`). They are excluded from `npm run build`, so a production MCP deploy is unchanged by ingest-only edits.
+
+```bash
+# Load HTML/PDF extracts from a local folder
+npm run ingest -- --src <dir> [--property X] [--report Y] [--dry-run]
+
+# Re-parse documents.markdown already in Mongo (income-statement repair: splits, wrap stitch, unique-name fill)
+npm run reparse -- --report income_statement [--property X] [--dry-run]
+
+# Repair unit tests
+npm run test
+
+# Optional: JSON Schema validators on collections, then a coverage/row-shape check
+npm run ensure-schema
+npm run validate
+```
+
+`tsconfig.json` already excludes `src/ingest/**`, `src/schema.ts`, and `src/validate.ts` from the MCP compile.
+
 ## Coverage
 
 Eleven properties. Orchard MRI: 2023–2025 (cash) plus 2026 through July (accrual). Bell Ranch, Timbers, Muse, and Corbett: 2026 only. **1311** reports after the 2023–2024 load. 1050 has no June 2024 income statement. Parkway has no December 2024 general ledger and no May 2025 general ledger. Muse and Corbett 2026 have no June P&L. Bell Ranch has two income-statement layouts per month — pass `layout`. No cash flow.
